@@ -9,8 +9,8 @@ Partitioned LD scores for active regulatory regions for ROADMAP epigenomics tiss
 ## Scripts
 
 ### ROADMAP ANALYSIS
-psychimmgenA01  Get IDEAS trackhubs and name roadmap samples
-psychimmgenA02  Convert IDEAS tracks to bed file of ranges for the active states
+- psychimmgenA01  Get IDEAS trackhubs and name roadmap samples
+- psychimmgenA02  Convert IDEAS tracks to bed file of ranges for the active states
 psychimmgenA03	Make ldcts, annotations, then partition LD scores for the active elements
 psychimmgenA04 	Make separate IDEAS annotations bed files 
 psychimmgenA05	Make promoter and genicenhancer bed files
