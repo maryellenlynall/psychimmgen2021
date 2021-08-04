@@ -1,0 +1,249 @@
+---
+title: "Repeat of psychimmgenB01 processing for disorder-specific risks"
+output: html_document
+---
+
+```{bash}
+
+SUMSTATSDIR=/lustre/scratch117/cellgen/team297/mel41/gwas-sumstats-harmoniser
+cd $SUMSTATSDIR
+
+```
+
+Prep rheumatoid arthritis sumstats to format required by pipeline
+```{bash}
+
+FILE=/lustre/scratch117/cellgen/team297/mel41/summarystats/ra/RA_GWASmeta_European_v2.txt
+# Check is tab-separated 
+if awk '{exit !/\t/}' "$FILE"; then echo "Tab separated"; else echo "Not tab separated"; fi
+cp $FILE $SUMSTATSDIR/toharmonise/ra_okada2014_37.tsv
+
+cd $SUMSTATSDIR/toharmonise/
+sed -i '1s/\tChr\t/\tchromosome\t/' ra_okada2014_37.tsv
+sed -i '1s/SNPID\t/variant_id\t/' ra_okada2014_37.tsv
+sed -i '1s/\tP-val/\tp_value/' ra_okada2014_37.tsv
+sed -i '1s/\tPosition(hg19)\t/\tbase_pair_location\t/' ra_okada2014_37.tsv
+sed -i '1s/\tOR_A1\t/\todds_ratio\t/' ra_okada2014_37.tsv
+sed -i '1s/\tA2\t/\tother_allele\t/' ra_okada2014_37.tsv
+sed -i '1s/\tA1\t/\teffect_allele\t/' ra_okada2014_37.tsv
+sed -i '1s/\tOR_95%CIlow\t/\tci_lower\t/' ra_okada2014_37.tsv
+sed -i '1s/\tOR_95%CIup\t/\tci_upper\t/' ra_okada2014_37.tsv
+sed -i '1s/$/\tstandard_error\teffect_allele_frequency/; 2,$s/$/\tNA\tNA/' $SUMSTATSDIR/toharmonise/ra_okada2014_37.tsv
+sed -i '2,$s/^chr//' $SUMSTATSDIR/toharmonise/ra_okada2014_37.tsv 
+# Add a row for beta
+# OR is row 6
+awk 'BEGIN {OFS=FS="\t"} NR==1{print $0,"beta"} NR>1{a=log($6);print $0,a}' $SUMSTATSDIR/toharmonise/ra_okada2014_37.tsv > tmp.tsv
+mv tmp.tsv $SUMSTATSDIR/toharmonise/ra_okada2014_37.tsv
+
+```
+
+Prep SZS sumstats
+```{bash}
+
+cd toharmonise
+FILE=/lustre/scratch117/cellgen/team297/mel41/summarystats/szs/rall.txt
+if awk '{exit !/\t/}' "$FILE"; then echo "Tab separated"; else echo "Not tab separated"; fi
+cp $FILE $SUMSTATSDIR/toharmonise/szs_ripke2014_37.tsv
+cd $SUMSTATSDIR/toharmonise/
+sed -i '1s/hg19chrc/chromosome/' szs_ripke2014_37.tsv
+sed -i '1s/snpid/variant_id/' szs_ripke2014_37.tsv
+sed -i '1s/\tp\t/\tp_value\t/' szs_ripke2014_37.tsv
+sed -i '1s/bp/base_pair_location/' szs_ripke2014_37.tsv
+sed -i '1s/or/odds_ratio/' szs_ripke2014_37.tsv
+sed -i '1s/\tse\t/\tstandard_error\t/' szs_ripke2014_37.tsv
+sed -i '1s/a2/other_allele/' szs_ripke2014_37.tsv
+sed -i '1s/a1/effect_allele/' szs_ripke2014_37.tsv
+sed -i '1s/$/\tci_lower\tci_upper\teffect_allele_frequency/; 2,$s/$/\tNA\tNA\tNA/' $SUMSTATSDIR/toharmonise/szs_ripke2014_37.tsv
+head $SUMSTATSDIR/toharmonise/szs_ripke2014_37.tsv
+sed -i '2,$s/^chr//' $SUMSTATSDIR/toharmonise/szs_ripke2014_37.tsv 
+# Add row for beta
+# OR is row 7
+awk 'BEGIN {OFS=FS="\t"} NR==1{print $0,"beta"} NR>1{a=log($7);print $0,a}' $SUMSTATSDIR/toharmonise/szs_ripke2014_37.tsv > tmp.tsv
+mv tmp.tsv $SUMSTATSDIR/toharmonise/szs_ripke2014_37.tsv
+
+```
+
+Process MDD sumstats
+```{bash}
+
+FILE=/lustre/scratch117/cellgen/team297/mel41/summarystats/mdd/23andMeRemoved_Howard_FINNGEN_ICDdepMVP.txt
+cd toharmonise
+if awk '{exit !/\t/}' "$FILE"; then echo "Tab separated"; else echo "Not tab separated"; fi
+tr -s ' ' \\t < $FILE > $SUMSTATSDIR/toharmonise/mdd_mvp2020_37.tsv
+cd $SUMSTATSDIR/toharmonise/
+sed -i '1s/\tCHR\t/\tchromosome\t/' mdd_mvp2020_37.tsv
+sed -i '1s/rsid/variant_id/' mdd_mvp2020_37.tsv
+sed -i '1s/\tP/\tp_value/' mdd_mvp2020_37.tsv
+sed -i '1s/\tBP\t/\tbase_pair_location\t/' mdd_mvp2020_37.tsv
+sed -i '1s/EFFECT/beta/' mdd_mvp2020_37.tsv
+sed -i '1s/\tSE\t/\tstandard_error\t/' mdd_mvp2020_37.tsv
+sed -i '1s/A2/other_allele/' mdd_mvp2020_37.tsv
+sed -i '1s/A1/effect_allele/' mdd_mvp2020_37.tsv
+sed -i '1s/$/\tci_lower\tci_upper\teffect_allele_frequency/; 2,$s/$/\tNA\tNA\tNA/' $SUMSTATSDIR/toharmonise/mdd_mvp2020_37.tsv
+head $SUMSTATSDIR/toharmonise/mdd_mvp2020_37.tsv
+# Add a row for odds_ratio
+# beta is column 7
+awk 'BEGIN {OFS=FS="\t"} NR==1{print $0,"odds_ratio"} NR>1{a=exp($7);print $0,a}' $SUMSTATSDIR/toharmonise/mdd_mvp2020_37.tsv > tmp.tsv
+head tmp.tsv
+mv tmp.tsv $SUMSTATSDIR/toharmonise/mdd_mvp2020_37.tsv
+
+```
+
+Process Alzheimer's sumstats
+```{bash}
+
+FILE=/lustre/scratch117/cellgen/team297/mel41/summarystats/alz/AD_sumstats_Jansenetal_2019sept.txt
+cp $FILE $SUMSTATSDIR/toharmonise/alz_jansen2019_37.tsv
+cd $SUMSTATSDIR/toharmonise/
+sed -i '1s/\tCHR\t/\tchromosome\t/' alz_jansen2019_37.tsv
+sed -i '1s/\tSNP\t/\tvariant_id\t/' alz_jansen2019_37.tsv
+sed -i '1s/\tP\t/\tp_value\t/' alz_jansen2019_37.tsv
+sed -i '1s/\tBP\t/\tbase_pair_location\t/' alz_jansen2019_37.tsv
+sed -i '1s/\tBETA\t/\tbeta\t/' alz_jansen2019_37.tsv
+sed -i '1s/\tSE/\tstandard_error/' alz_jansen2019_37.tsv
+sed -i '1s/\tA2\t/\tother_allele\t/' alz_jansen2019_37.tsv
+sed -i '1s/\tA1\t/\teffect_allele\t/' alz_jansen2019_37.tsv
+sed -i '1s/\tEAF\t/\teffect_allele_frequency\t/' alz_jansen2019_37.tsv 
+sed -i '1s/$/\tci_lower\tci_upper/; 2,$s/$/\tNA\tNA/' $SUMSTATSDIR/toharmonise/alz_jansen2019_37.tsv
+head $SUMSTATSDIR/toharmonise/alz_jansen2019_37.tsv
+cat $SUMSTATSDIR/toharmonise/alz_jansen2019_37.tsv | wc -l
+# Add a column for odds_ratio
+# beta is column 13
+awk 'BEGIN {OFS=FS="\t"} NR==1{print $0,"odds_ratio"} NR>1{a=exp($13);print $0,a}' $SUMSTATSDIR/toharmonise/alz_jansen2019_37.tsv > tmp.tsv
+mv tmp.tsv $SUMSTATSDIR/toharmonise/alz_jansen2019_37.tsv
+
+```
+
+Process bipolar disorder sumstats
+```{bash}
+FILE=/lustre/scratch117/cellgen/team297/mel41/summarystats/bipolar/daner_PGC_BIP32b_mds7a_0416a
+if awk '{exit !/\t/}' "$FILE"; then echo "Tab separated"; else echo "Not tab separated"; fi
+cp $FILE $SUMSTATSDIR/toharmonise/bip_stahl2018_37.tsv
+cd $SUMSTATSDIR/toharmonise/
+sed -i '1s/CHR\t/chromosome\t/' bip_stahl2018_37.tsv
+sed -i '1s/\tSNP\t/\tvariant_id\t/' bip_stahl2018_37.tsv
+sed -i '1s/\tP\t/\tp_value\t/' bip_stahl2018_37.tsv
+sed -i '1s/\tBP\t/\tbase_pair_location\t/' bip_stahl2018_37.tsv
+# sed -i '1s/BETA/beta/' bip_stahl2018_37.tsv # No beta in file
+sed -i '1s/\tOR\t/\todds_ratio\t/' bip_stahl2018_37.tsv
+sed -i '1s/\tSE\t/\tstandard_error\t/' bip_stahl2018_37.tsv
+sed -i '1s/A2/other_allele/' bip_stahl2018_37.tsv
+sed -i '1s/A1/effect_allele/' bip_stahl2018_37.tsv
+sed -i '1s/FRQ_U_31358/effect_allele_frequency/' bip_stahl2018_37.tsv 
+sed -i '1s/$/\tci_lower\tci_upper/; 2,$s/$/\tNA\tNA/' $SUMSTATSDIR/toharmonise/bip_stahl2018_37.tsv
+head $SUMSTATSDIR/toharmonise/bip_stahl2018_37.tsv
+# Add a column for beta 
+# OR is column 9
+awk 'BEGIN {OFS=FS="\t"} NR==1{print $0,"beta"} NR>1{a=log($9);print $0,a}' $SUMSTATSDIR/toharmonise/bip_stahl2018_37.tsv > tmp.tsv
+
+```
+
+Process ADHD sumstats
+```{bash}
+FILE=/lustre/scratch117/cellgen/team297/mel41/summarystats/adhd/adhd_eur_jun2017
+if awk '{exit !/\t/}' "$FILE"; then echo "Tab separated"; else echo "Not tab separated"; fi
+cp $FILE $SUMSTATSDIR/toharmonise/adhd_demontis2017_37.tsv
+cd $SUMSTATSDIR/toharmonise/
+sed -i '1s/CHR\t/chromosome\t/' adhd_demontis2017_37.tsv
+sed -i '1s/\tSNP\t/\tvariant_id\t/' adhd_demontis2017_37.tsv
+sed -i '1s/\tP/\tp_value/' adhd_demontis2017_37.tsv
+sed -i '1s/\tBP\t/\tbase_pair_location\t/' adhd_demontis2017_37.tsv
+# sed -i '1s/BETA/beta/' adhd_demontis2017_37.tsv # No beta in file
+sed -i '1s/\tOR\t/\todds_ratio\t/' adhd_demontis2017_37.tsv
+sed -i '1s/\tSE\t/\tstandard_error\t/' adhd_demontis2017_37.tsv
+sed -i '1s/A2/other_allele/' adhd_demontis2017_37.tsv
+sed -i '1s/A1/effect_allele/' adhd_demontis2017_37.tsv
+sed -i '1s/$/\tci_lower\tci_upper\teffect_allele_frequency/; 2,$s/$/\tNA\tNA\tNA/' $SUMSTATSDIR/toharmonise/adhd_demontis2017_37.tsv
+# Add column for beta 
+# OR is column 7
+awk 'BEGIN {OFS=FS="\t"} NR==1{print $0,"beta"} NR>1{a=log($7);print $0,a}' $SUMSTATSDIR/toharmonise/adhd_demontis2017_37.tsv > tmp.tsv
+mv tmp.tsv $SUMSTATSDIR/toharmonise/adhd_demontis2017_37.tsv
+
+```
+
+
+Now ASD asd_grove2017
+```{bash}
+FILE=/lustre/scratch117/cellgen/team297/mel41/summarystats/asd/iPSYCH-PGC_ASD_Nov2017
+if awk '{exit !/\t/}' "$FILE"; then echo "Tab separated"; else echo "Not tab separated"; fi
+cp $FILE $SUMSTATSDIR/toharmonise/asd_grove2017_37.tsv
+cd $SUMSTATSDIR/toharmonise/
+sed -i '1s/CHR\t/chromosome\t/' asd_grove2017_37.tsv
+sed -i '1s/\tSNP\t/\tvariant_id\t/' asd_grove2017_37.tsv
+sed -i '1s/\tP/\tp_value/' asd_grove2017_37.tsv
+sed -i '1s/\tBP\t/\tbase_pair_location\t/' asd_grove2017_37.tsv
+# sed -i '1s/BETA/beta/' asd_grove2017_37.tsv # No beta in file
+sed -i '1s/\tOR\t/\todds_ratio\t/' asd_grove2017_37.tsv
+sed -i '1s/\tSE\t/\tstandard_error\t/' asd_grove2017_37.tsv
+sed -i '1s/A2/other_allele/' asd_grove2017_37.tsv
+sed -i '1s/A1/effect_allele/' asd_grove2017_37.tsv
+sed -i '1s/$/\tci_lower\tci_upper\teffect_allele_frequency/; 2,$s/$/\tNA\tNA\tNA/' $SUMSTATSDIR/toharmonise/asd_grove2017_37.tsv
+# Add column for beta 
+# OR is column 7
+awk 'BEGIN {OFS=FS="\t"} NR==1{print $0,"beta"} NR>1{a=log($7);print $0,a}' $SUMSTATSDIR/toharmonise/asd_grove2017_37.tsv > tmp.tsv
+mv tmp.tsv $SUMSTATSDIR/toharmonise/asd_grove2017_37.tsv
+
+```
+
+Process BMI sumstats
+```{bash}
+FILE=/lustre/scratch117/cellgen/team297/mel41/summarystats/bmi/bmi.giant-ukbb.meta-analysis.combined.23May2018.txt
+if awk '{exit !/\t/}' "$FILE"; then echo "Tab separated"; else echo "Not tab separated"; fi
+tr -s ' ' \\t < $FILE > $SUMSTATSDIR/toharmonise/bmi_pulit2018_37.tsv
+sed -i 's/:[ATCG]:[ATCG]//' $SUMSTATSDIR/toharmonise/bmi_pulit2018_37.tsv
+cd $SUMSTATSDIR/toharmonise/
+sed -i '1s/CHR\t/chromosome\t/' bmi_pulit2018_37.tsv
+sed -i '1s/\tSNP\t/\tvariant_id\t/' bmi_pulit2018_37.tsv
+sed -i '1s/\tP\t/\tp_value\t/' bmi_pulit2018_37.tsv
+sed -i '1s/\tPOS\t/\tbase_pair_location\t/' bmi_pulit2018_37.tsv
+sed -i '1s/\tBETA\t/\tbeta\t/' bmi_pulit2018_37.tsv 
+# sed -i '1s/\tOR\t/\todds_ratio\t/' bmi_pulit2018_37.tsv # No OR in file
+sed -i '1s/\tSE\t/\tstandard_error\t/' bmi_pulit2018_37.tsv
+sed -i '1s/\tOther_Allele\t/\tother_allele\t/' bmi_pulit2018_37.tsv
+sed -i '1s/Tested_Allele/effect_allele/' bmi_pulit2018_37.tsv
+# EAF is from an independent dataset 
+sed -i '1s/Freq_Tested_Allele/effect_allele_frequency/' bmi_pulit2018_37.tsv
+sed -i '1s/$/\tci_lower\tci_upper/; 2,$s/$/\tNA\tNA/' $SUMSTATSDIR/toharmonise/bmi_pulit2018_37.tsv
+# Add coolumn for odds ratio 
+# beta is column 7
+awk 'BEGIN {OFS=FS="\t"} NR==1{print $0,"odds_ratio"} NR>1{a=exp($7);print $0,a}' $SUMSTATSDIR/toharmonise/bmi_pulit2018_37.tsv > tmp.tsv
+mv tmp.tsv $SUMSTATSDIR/toharmonise/bmi_pulit2018_37.tsv
+
+```
+
+Now harmonize all tidies summary statistics
+```{bash}
+SUMSTATSDIR=/lustre/scratch117/cellgen/team297/mel41/gwas-sumstats-harmoniser
+cd $SUMSTATSDIR
+
+# Check all the headers:
+head $SUMSTATSDIR/toharmonise/*37.tsv
+
+source .venv/bin/activate
+rm $SUMSTATSDIR/toharmonise/tmp.tsv
+rm $SUMSTATSDIR/tmp.tsv
+./wrapper_harmonization_to_hg38.sh 
+
+
+```
+
+Copy files to directory pre-clumping (change suffix to reflect is now hg38). 
+```{bash}
+
+SUMSTATSDIR=/lustre/scratch117/cellgen/team297/mel41/gwas-sumstats-harmoniser
+declare -a listA
+listA=("crossdisorder_lee2019" "bip_stahl2018" "szs_ripke2014" "mdd_mvp2020" "alz_jansen2019" "adhd_demontis2017" "asd_grove2017" "bmi_pulit2018" "ra_okada2014") # No comma
+#listA=("bip_stahl2018" "mdd_mvp2020" "asd_grove2017") 
+for f in "${listA[@]}"; do
+echo "Moving ${f} (if it exists)"
+FILE=$SUMSTATSDIR/toharmonise/${f}_37/harmonised.qc.tsv
+if [ -f "$FILE" ]; then
+    echo "$FILE exists."
+    cp $FILE /nfs/team205/MRC_lab/mel41/summary_stats/hg38/${f}_hg38_harmonised.qc.tsv
+else
+  echo "$FILE does not exist."
+fi
+done 
+
+
+```

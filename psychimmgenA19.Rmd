@@ -1,0 +1,80 @@
+---
+title: "View promoter/enhancer s-LDSC results from psychimmgenA18"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(magrittr)
+library(here)
+
+# Load roadmap_names
+load(here("data/raw/roadmap/roadmap_sample_info_tidy.Rdata"))
+load(file=here("res/immune_order_by_cell.RData"))
+
+conditions <- c("crossdisorder2019","szs_ripke","bip_stahl", "mvp_mdd", "alz_jansen", "bmi_pulit","asd_grove","adhd_demontis","ra_osaka")
+names(conditions) <- c("xdiss","szs","bip","mdd","alz","bmi","asd","adhd","ra")
+print(conditions)
+
+annotations <- c("4_Enh","genicenhancer","promoter")
+
+# Import cell type results
+res_IDEASv1 <- list()
+for (i in 1:length(conditions)){
+  print(conditions[i])
+  for (a in annotations){
+    res_IDEASv1[[names(conditions[i])]][[a]] <- read.table(paste0("/Users/mary/non_dropbox/exps/ldsc/", conditions[i],"_cts_IDEASv1_ldscores_separate_",a,".cell_type_results.txt"), sep="\t", header=T)
+  }
+}
+
+```
+
+
+```{r}
+res_all <- list()
+for (i in names(conditions)){
+tmp <- res_IDEASv1[[i]]
+# Merge with roadmap names by EID
+tmp %<>% map(function(x) dplyr::left_join(x, roadmap_names, by=c("Name"="mnemonic")))
+# Convert to df
+res_all[[i]] <- dplyr::bind_rows(tmp, .id = "annotation")
+}
+
+```
+
+Select immune cell tissues
+```{r}
+library(viridis)
+
+# Loop over disorders
+for (i in names(conditions)){
+res <- res_all[[i]]
+res_immune <- res %>% dplyr::filter(name %in% immune_order_by_cell)
+res_immune <- res_immune %>% group_by(annotation) %>% mutate(immune_rank=rank(Coefficient_P_value))
+fct_reorg <- function(fac, ...) {
+   fct_recode(fct_relevel(fac, ...), ...)
+}
+res_immune$annotation %<>% fct_reorg("Enhancer"="4_Enh","Genic enhancer"="genicenhancer","Active promoter"="promoter")
+
+# FDR, correcting across cell types and annotations
+print(sprintf("FDR correcting across %d p values", nrow(res_immune))) # 78 p values
+res_immune$FDR <- p.adjust(res_immune$Coefficient_P_value)
+
+# Group by cell type
+res_immune$name %<>% factor(levels=immune_order_by_cell)
+
+# Check top results
+x <- as.data.frame(res_immune %>% arrange(Coefficient_P_value) %>% filter(Coefficient_P_value<0.05) %>% select(annotation, name, Coefficient, Coefficient_P_value, FDR))
+print(x)
+write.table(x, quote=F, row.names = F, file = here(paste0("res/integrate_immune_ranks_3level_separate_similarcat_",i,".csv")))
+
+# FIGURE for each disorder
+res_immune$Significance <- factor(ifelse(res_immune$FDR<0.05, "FDR P<0.05", ifelse(res_immune$Coefficient_P_value<0.05, "raw P<0.05","Not sig")), levels=c("Not sig","raw P<0.05","FDR P<0.05"), ordered=T)
+width=5.75
+height=5.5
+ggplot(res_immune, aes(x=annotation, y=name, fill=immune_rank, size=Significance)) +  geom_point(shape=22) + scale_fill_viridis(name = "Cell type rank\n(by significance)", direction = -1) + scale_size_manual(values=c(1,3,5)) + theme_bw() + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust=0.5), legend.title = element_text(size=10)) + xlab("") + ylab("") + guides(fill=guide_colorbar(reverse=T))
+ggsave(filename = here(paste0("pics/integrate_immune_ranks_3level_separate_similarcat_",i,".pdf")), width = width, height=height)
+}
+```
+
+

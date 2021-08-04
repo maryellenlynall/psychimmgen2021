@@ -1,0 +1,101 @@
+---
+title: "Test correlations between s-LDSC z-scores and heritability z-scores"
+output: html_document
+---
+
+Obtain SNP-based heritability using LDSC
+```{bash}
+
+deactivate
+conda activate ldsc
+
+LDSCDIR=/Users/mary/non_dropbox/exps/ldsc
+cd $LDSCDIR
+
+# Download the pre-computed LD scores
+wget https://data.broadinstitute.org/alkesgroup/LDSCORE/eur_w_ld_chr.tar.bz2
+tar -jxvf eur_w_ld_chr.tar.bz2
+rm eur_w_ld_chr.tar.bz2
+
+# Crossdisorder
+# Inputting munged sumstats as used for s-LDSC
+COND=crossdisorder2019
+$LDSCDIR/ldsc.py --h2 $LDSCDIR/${COND}.sumstats.gz --ref-ld-chr $LDSCDIR/eur_w_ld_chr/ --w-ld-chr $LDSCDIR/eur_w_ld_chr/ --out ${COND}_h2
+less ${COND}_h2.log 
+
+# And run the rest via array
+declare -a listA
+listA=("crossdisorder2019" "adhd_demontis" "alz_jansen" "asd_grove" "bip_stahl" "bmi_pulit" "mvp_mdd" "ra_osaka" "szs_ripke") 
+for COND in "${listA[@]}"; do
+echo "Calculating SNP-based heritability for ${COND}"
+$LDSCDIR/ldsc.py --h2 $LDSCDIR/${COND}.sumstats.gz --ref-ld-chr $LDSCDIR/eur_w_ld_chr/ --w-ld-chr $LDSCDIR/eur_w_ld_chr/ --out ${COND}_h2
+done
+
+for COND in "${listA[@]}"; do
+echo "${COND}"
+less ${COND}_h2.log
+done
+```
+
+Input data from log files
+```{r}
+setwd("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+library(here)
+library(tidyverse)
+
+# SNP-based heritability (input manually from log files)
+h2 <- c("Trans-risk"=0.2867, "ADHD"=0.2354, "Alzheimer's"=0.0148, "Autism"=0.1941, "Bipolar disorder"=0.3467, "BMI"=0.1871, "Depression"=0.048, "Rheumatoid arthritis"=0.1406, "Schizophrenia"=0.2365)
+
+# SE for SNP-based heritability (input manually from log files)
+h2_se <- c("Trans-risk"=0.0087, "ADHD"=0.0153, "Alzheimer's"=0.0021, "Autism"=0.0168, "Bipolar disorder"=0.0174, "BMI"=0.0054, "Depression"=0.0016, "Rheumatoid arthritis"=0.0176, "Schizophrenia"=0.0094)
+
+# Heritability z-scores
+h2_z <- h2/h2_se
+
+```
+
+Correlation between h2 z and s-LDSC z-scores
+```{r}
+load(here("res/res_IDEASv1_active.RData"))
+library(magrittr)
+
+res$zscore <- res$Coefficient/res$Coefficient_std_error
+
+# Prettify names to match h2_z above
+res$condition_pretty <- forcats::fct_recode(res$condition, "Trans-risk"="xdiss", "ADHD"="adhd", "Alzheimer's"="alz", "Autism"="asd", "Bipolar disorder"="bip", "BMI"="bmi", "Depression"="mdd", "Rheumatoid arthritis"="ra", "Schizophrenia"="szs")
+
+# Select z-scores for crossdisorder top immune and brain tissues
+# Top immune
+res_top_immune_cd8 <- res %>% filter(name=="Primary T CD8+ naive cells from peripheral blood") %>% select(condition_pretty, zscore)
+res_top_immune_cd8$cell <- "T cytotoxic naive cells (peripheral blood)"
+
+# And 2nd highest immune
+res_top_immune_cd4 <- res %>% filter(name=="Primary T helper naive cells from peripheral blood 2") %>% select(condition_pretty, zscore)
+res_top_immune_cd4$cell <- "T helper naive cells (peripheral blood)"
+
+# Top brain
+res_top_brain_male <- res %>% filter(name=="Fetal Brain Male") %>% select(condition_pretty, zscore)
+res_top_brain_male$cell <- "Fetal brain (male)"
+
+# And test female (2nd highest enrichment), to check isn't sex-specific effect
+res_top_brain_female <- res %>% filter(name=="Fetal Brain Female") %>% select(condition_pretty, zscore)
+res_top_brain_female$cell <- "Fetal brain (female)"
+
+res_top <- bind_rows(res_top_immune_cd8, res_top_immune_cd4, res_top_brain_male, res_top_brain_female)
+
+forcor <- data.frame(condition_pretty=names(h2_z), h2_z=h2_z)
+forcor <- left_join(res_top, forcor, by="condition_pretty", keep=F)
+
+# SUPPLEMENTARY FIGURE Plot correlations with labels.
+library(ggrepel)
+ggplot(forcor, aes(x=h2_z, y=zscore, label=condition_pretty)) + geom_point() + geom_text_repel(size=3) + geom_smooth(method = "lm", se=FALSE) + theme_bw() + xlab("SNP heritability z-score") + ylab("s-LDSC z-score") + facet_wrap(~cell, ncol=1) + expand_limits(y=c(-3, 11.5))
+ggsave(filename = here("pics/h2z_vs_sldscz.pdf"),width=3.5,height=9.5)
+
+cor.test(~ zscore + h2_z, data=forcor %>% dplyr::filter(cell=="Fetal brain (male)"), method="spearman") # rho=0.87, p=0.005 
+
+cor.test(~ zscore + h2_z, data=forcor %>% dplyr::filter(cell=="Fetal brain (female)"), method="spearman") # rho=0.87, p=0.005 [i.e. same]
+
+cor.test(~ zscore + h2_z, data=forcor %>% dplyr::filter(cell=="T cytotoxic naive cells (peripheral blood)"), method="spearman") # rho=0, p=1
+
+cor.test(~ zscore + h2_z, data=forcor %>% dplyr::filter(cell=="T helper naive cells (peripheral blood)"), method="spearman") # rho=0.03, p=0.9
+```

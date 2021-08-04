@@ -1,0 +1,36 @@
+---
+title: "Reformat results to obtain top loci"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+library(tidyverse)
+# Not including asd - only 2 top loci
+conditions <- c("adhd","bmi","mdd","alz","bip","crossdis","szs", "ra")
+
+loci <- lapply(conditions, function(x){
+  # Get top loci
+  print(x)
+  path <- paste0("/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/forcheers_",x,"_1kg.tsv")
+  toploci <- read.table(path, header = T)
+  toploci$variant_id <- gsub(":","_",toploci$variant_id)
+  head(toploci)
+
+  # Get all the LDs for each
+  loci <- lapply(1:dim(toploci)[1], function(y){
+    snps <- read.table(paste0("/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/",x,"_1kg/",toploci[y,"Chrom"],"/results_ld_",toploci[y,"variant_id"],".txt"))
+    colnames(snps) <- c("chr","snp_index","snp_index_pos","snp","snp_pos","r2","snp_index_rsid")
+    return(snps)
+    })
+  names(loci) <- toploci$variant_id
+  return(loci)
+})
+names(loci) <- conditions
+
+# Save loci dataframe
+save(loci, file = "/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/cheersout/allloci_plus_ldsnps_1kg.RData") 
+
+```

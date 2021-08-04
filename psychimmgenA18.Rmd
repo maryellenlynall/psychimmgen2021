@@ -1,0 +1,76 @@
+---
+title: "s-LDSC for component annotations (separate promoters and enhancers)"
+output: html_document
+---
+
+```{bash}
+
+LDSCDIR=/Users/mary/non_dropbox/exps/ldsc
+cd $LDSCDIR
+
+conda deactivate 
+conda activate ldsc
+
+cts_name=IDEASv1_ldscores_separate
+annots=(`cat "$LDSCDIR/IDEASv1_ldscores/annotations.txt"`)
+echo ${annots[@]}
+
+# BIPOLAR
+for ANNOT in "${annots[@]}"; do
+echo $ANNOT
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/bip_stahl.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out bip_stahl_cts_${cts_name}_${ANNOT} --ref-ld-chr-cts $LDSCDIR/IDEASv1_${ANNOT}.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+done &
+
+# ADHD
+for ANNOT in "${annots[@]}"; do
+echo $ANNOT
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/adhd_demontis.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out adhd_demontis_cts_${cts_name}_${ANNOT} --ref-ld-chr-cts $LDSCDIR/IDEASv1_${ANNOT}.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+done &
+
+# ALZ
+for ANNOT in "${annots[@]}"; do
+echo $ANNOT
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/alz_jansen.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out alz_jansen_cts_${cts_name}_${ANNOT} --ref-ld-chr-cts $LDSCDIR/IDEASv1_${ANNOT}.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+done &
+
+# ASD
+for ANNOT in "${annots[@]}"; do
+echo $ANNOT
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/asd_grove.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out asd_grove_cts_${cts_name}_${ANNOT} --ref-ld-chr-cts $LDSCDIR/IDEASv1_${ANNOT}.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+done &
+
+# BMI
+for ANNOT in "${annots[@]}"; do
+echo $ANNOT
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/bmi_pulit.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out bmi_pulit_cts_${cts_name}_${ANNOT} --ref-ld-chr-cts $LDSCDIR/IDEASv1_${ANNOT}.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+done &
+
+# CROSSDIS
+for ANNOT in "${annots[@]}"; do
+echo $ANNOT
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/crossdisorder2019.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out crossdisorder2019_cts_${cts_name}_${ANNOT} --ref-ld-chr-cts $LDSCDIR/IDEASv1_${ANNOT}.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+done &
+
+# MDD
+for ANNOT in "${annots[@]}"; do
+echo $ANNOT
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/mvp_mdd.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out mvp_mdd_cts_${cts_name}_${ANNOT} --ref-ld-chr-cts $LDSCDIR/IDEASv1_${ANNOT}.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+done &
+
+# SZS
+for ANNOT in "${annots[@]}"; do
+echo $ANNOT
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/szs_ripke.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out szs_ripke_cts_${cts_name}_${ANNOT} --ref-ld-chr-cts $LDSCDIR/IDEASv1_${ANNOT}.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+done &
+
+# RA
+for ANNOT in "${annots[@]}"; do
+echo $ANNOT
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/ra_osaka.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out ra_osaka_cts_${cts_name}_${ANNOT} --ref-ld-chr-cts $LDSCDIR/IDEASv1_${ANNOT}.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+done &
+
+
+```
+
+
+

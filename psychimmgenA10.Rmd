@@ -1,0 +1,44 @@
+---
+title: "Process rheumatoid arthritis sumstats then perform s-LDSC"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+MUNGE
+
+Okada 2014 Nature
+https://pubmed.ncbi.nlm.nih.gov/24390342/
+
+Downloaded from here on 20210319:
+Website: http://plaza.umin.ac.jp/~yokada/datasource/software.htm
+Actual data link: http://plaza.umin.ac.jp/~yokada/datasource/files/GWASMetaResults/RA_GWASmeta_European_v2.txt.gz
+Chose option: "Eurpean RA GWAS meta-analysis (14,361 RA cases and 43,923 conrols)"
+
+
+Munge sumstats
+```{bash}
+
+# NB. Changed OR(A1) to OR_A1 manually in header
+
+LDSCDIR=/Users/mary/non_dropbox/exps/ldsc
+cd $LDSCDIR
+FORLDSCDIR=~/Library/Mobile\ Documents/com~apple~CloudDocs/Documents/research/exps/forldsc
+
+conda deactivate
+conda activate ldsc
+
+${LDSCDIR}/munge_sumstats.py --sumstats ~/Library/Mobile\ Documents/com~apple~CloudDocs/Documents/research/exps/summary_stats/ra/RA_GWASmeta_European_v2.txt --N 58284 --N-cas 14361 --N-con 43923 --signed-sumstats OR_A1,1 --merge-alleles ${FORLDSCDIR}/w_hm3.snplist --out ra_osaka --snp SNIPID --p P-val --chunksize 500000
+
+```
+
+s-LDSC
+```{bash}
+
+cd $LDSCDIR
+cts_name=IDEASv1_active
+
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/ra_osaka.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out ra_osaka_cts_${cts_name} --ref-ld-chr-cts $LDSCDIR/$cts_name.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+
+```
+

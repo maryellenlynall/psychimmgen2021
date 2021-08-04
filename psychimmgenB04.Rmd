@@ -1,0 +1,134 @@
+---
+title: "Generate r2 linkage disequilibrium for 1KG EUR hg38 and filter summary stats on 1KG SNPs"
+output: html_document
+---
+
+```{bash}
+# Get 1KG EUR files and tbi
+cd /lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR
+for i in {1..22}; do
+wget http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/release/20190312_biallelic_SNV_and_INDEL/ALL.chr${i}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz
+wget http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/release/20190312_biallelic_SNV_and_INDEL/ALL.chr${i}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz.tbi
+done
+
+# Get 1KG ped file
+wget ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/working/20130606_sample_info/20130606_g1k.ped
+
+```
+
+
+Extract unrelated European samples (515 samples); code based on: https://github.com/hakyimlab/gtex-miscellaneous-processing/blob/d9b0df29f0d97e91d29e8c23c41ddefa9e1bb950/src/1000G/extract_samples_hg38.py
+```{python}
+
+import pandas
+import gzip
+
+TG="/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR/ALL.chr1.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz"
+hg38_ids = []
+with gzip.open(TG) as tg:
+    for line in tg:
+        line = line.decode()
+        if "#CHROM" in line:
+            hg38_ids = line.strip().split()[9:]
+            break
+
+
+TGS="/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR/20130606_g1k.ped"
+
+samples = pandas.read_table(TGS)
+samples = samples.rename(columns={"Paternal ID":"paternal_id", "Maternal ID":"maternal_id", "Individual ID":"individual_id", "Family ID":"family_id"})
+samples = samples[samples.Population.isin({"CEU", "TSI", "FIN", "GBR", "IBS"})]
+print("Samples in EUR:",len(samples))
+samples = samples[(samples.paternal_id == "0") & (samples.maternal_id == "0")]
+samples = samples[samples["Other Comments"] != 'relationships are uncertain']
+print("Unrelated samples in EUR:",len(samples))
+i = samples.individual_id
+print("Unrelated samples in EUR also in genotype file:",len(i))
+i = i[i.isin(hg38_ids)]
+i.to_csv("/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/selected_hg38_eur_id.txt", header=False, index=False)
+
+```
+
+Also make plink version of files 
+```{bash}
+
+cd /lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR
+for chr in {1..22}; do
+plink --vcf EUR.chr${chr}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.maf0.01.annot.vcf.gz --out EUR.chr${chr}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.maf0.01
+done
+
+# Replace colons with underscores in the bim file SNP names for downstream use
+for chr in {1..22}; do
+sed -i 's/_/:/g' EUR.chr${chr}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.maf0.01.bim
+done
+
+```
+
+Filter SNPs to 1KG subset
+```{bash}
+
+cd /lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR
+
+QUEUE=normal # long
+THREADS=1
+MEM=2000
+for chr in {5..22}; do
+bsub -q ${QUEUE} -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "./script_filter_1kg_perchr.sh ${chr} > ./script_filter_1kg_${chr}_log.txt"
+done
+
+```
+
+Get the list of SNPs and calculate r2 using plink
+```{bash}
+
+cd /lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR
+
+QUEUE=normal # long
+THREADS=1
+MEM=10000
+for chr in {1..22}; do
+bsub -q ${QUEUE} -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "./script_calculate_1kg_r2_perchr.sh ${chr} > ./script_calculate_1kg_r2_${chr}_log.txt"
+done
+
+```
+
+Make the tabix files for each chromosome
+```{bash}
+cd /lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR
+
+QUEUE=normal 
+THREADS=1
+MEM=10000
+for chr in {1..22}; do
+bsub -q ${QUEUE} -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "./script_make_tabix_perchr.sh ${chr} > ./script_make_tabix_${chr}_log.txt"
+done
+
+```
+
+Now merge across chromosomes to get all chosen SNPs in format CHR_POS_REF_ALT
+```{bash}
+
+OUTPUT=/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR/GRCh38.EUR.maf0.01.snplist.txt
+
+cat /lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR/EUR_r2_maf0p01/chr{1..22}_GRCh38.EUR.snplist.txt > $OUTPUT
+
+```
+
+Now run the filtering for all summary stats
+```{bash}
+
+TARGETDIR=/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/filtered/parquets/
+FILTERSNPS=/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR/GRCh38.EUR.maf0.01.snplist.txt
+
+THREADS=1
+MEM=30000 # Need big memory because of file size
+QUEUE=normal
+declare -a listA
+listA=("crossdisorder_lee2019" "bip_stahl2018" "szs_ripke2014" "mdd_mvp2020" "alz_jansen2019" "adhd_demontis2017" "asd_grove2017" "bmi_pulit2018" "ra_okada2014") # No comma
+for t in "${listA[@]}"; do
+f=${t}_hg38
+echo "Filtering ${f}"
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "python filter_parquet_by_1kg.py -inFile $TARGETDIR/${f}.parquet -outFile $TARGETDIR/${f}_1kg.parquet -filterSnps $FILTERSNPS > log_filter_parquet_by_1kg_${f}.txt"
+done
+
+```

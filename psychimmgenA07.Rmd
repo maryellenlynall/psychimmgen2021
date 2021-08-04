@@ -1,0 +1,103 @@
+Submission script for partitioning of LD scores
+
+LD scores for active regulatory elements
+```{bash}
+
+conda deactivate
+conda activate ldsc
+
+NUMTHREADS=1 
+PREFIX="IDEASv1_active"
+LDSCDIR=/lustre/scratch117/cellgen/team205/mel41/mvp/ldsc
+ANNOTDIR=${LDSCDIR}/IDEASv1_ldscores
+
+cd $LDSCDIR
+
+# Check tissue IDs and get number of jobs required
+TISSUEFILE=${ANNOTDIR}/tissues.txt
+TISSUES=(`cat "${TISSUEFILE}"`)
+for t in ${TISSUES[@]}; do echo $t; done
+
+MAXJOBS=${#TISSUES[@]} 
+echo $MAXJOBS 
+
+OUTDIR=${LDSCDIR}/logs
+mkdir -p $OUTDIR
+
+MEM=600
+
+chmod a+x /lustre/scratch117/cellgen/team205/mel41/mvp/MVP_LDSC_SEG_04_sanger_farm_job.sh
+
+bsub -J"ldsc[1-$MAXJOBS]%127" -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=1]" -M${MEM} \
+-q normal \
+-n1 \
+-o ${OUTDIR}/ldsc_output.%J.%I \
+-e ${OUTDIR}/ldsc_errorfile.%J.%I \
+/lustre/scratch117/cellgen/team205/mel41/mvp/MVP_LDSC_SEG_04_sanger_farm_job.sh \
+$LDSCDIR $ANNOTDIR $PREFIX $TISSUEFILE $NUMTHREADS
+
+```
+
+LD scores for annotations comprising active regulatory elements (promoters, genic and non-genic enhancers)
+```{bash}
+
+NUMTHREADS=1 
+PREFIX="IDEASv1"
+LDSCDIR=/lustre/scratch117/cellgen/team205/mel41/mvp/ldsc
+ANNOTDIR=${LDSCDIR}/IDEASv1_ldscores_separate
+
+cd $LDSCDIR
+
+TISSUEFILE=${ANNOTDIR}/tissues_immune_and_brain.txt
+TISSUES=(`cat "${TISSUEFILE}"`)
+for t in ${TISSUES[@]}; do echo $t; done
+
+MAXJOBS=${#TISSUES[@]} 
+echo $MAXJOBS 
+
+OUTDIR=${LDSCDIR}/logs
+mkdir -p $OUTDIR
+
+MEM=1000
+
+chmod a+x /lustre/scratch117/cellgen/team205/mel41/mvp/MVP_LDSC_SEG_00B_sanger_farm_job_multipleannots.sh
+
+ANNOTFILE=$ANNOTDIR/annotations.txt
+ANNOTS=(`cat "${ANNOTFILE}"`)
+echo ${ANNOTS[@]}
+
+# ARGUMENTS
+# $1 LDSCDIR (input and output dir)
+# $2 ANNOTDIR (e.g /IDEASv1_ldscores, where annots are and where ldscores will go)
+# $3 PREFIX (e.g. IDEASv1_active)
+# $4 TISSUES (array, eg.. E001 E002 etc)
+# $5 NUMTHREADS (e.g. 22 for ldsc as 22 chromosomes)
+# $6 ANNOT e.g. 4_Enh, promoters (thin annot files you have generated earlier)
+# $7 FAILED JOB INDEX (will be a tissue and chr)
+
+conda deactivate
+conda activate ldsc
+
+for a in ${ANNOTS[@]}; do 
+echo $a
+bsub -J"ldsc[1-$MAXJOBS]%200" -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=1]" -M${MEM} \
+-q long \
+-n1 \
+-o ${OUTDIR}/ldsc_output.${a}.%J.%I \
+-e ${OUTDIR}/ldsc_errorfile.${a}.%J.%I \
+/lustre/scratch117/cellgen/team205/mel41/mvp/MVP_LDSC_SEG_00B_sanger_farm_job_multipleannots.sh \
+$LDSCDIR $ANNOTDIR $PREFIX $TISSUEFILE $NUMTHREADS $a
+done
+
+# Check success
+chromosomes=($(seq 1 1 22))
+for a in ${ANNOTS[@]}; do 
+for t in ${TISSUES[@]}; do 
+for CHR in "${chromosomes[@]}"; do
+echo $a $t ${CHR}
+cat /lustre/scratch117/cellgen/team205/mel41/mvp/ldsc/IDEASv1_ldscores_separate/IDEASv1_${a}_${t}.${CHR}.log | tail -n1
+done
+done 
+done > /lustre/scratch117/cellgen/team205/mel41/mvp/partition.log
+
+```

@@ -1,0 +1,155 @@
+---
+title: "Integrate s-LDSC results across disorders"
+output: html_document
+---
+
+Import IDEAS results
+```{r}
+
+setwd("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+library(here)
+load(here("data/raw/roadmap/roadmap_sample_info_tidy.Rdata"))
+
+library(data.table)
+library(tidyverse)
+library(magrittr)
+
+res_IDEASv1_active <- list()
+res_IDEASv1_active[["xdiss"]] <- read.table("/Users/mary/non_dropbox/exps/ldsc/crossdisorder2019_cts_IDEASv1_active.cell_type_results.txt", sep="\t", header=T)
+res_IDEASv1_active[["szs"]] <- read.table("/Users/mary/non_dropbox/exps/ldsc/szs_ripke_cts_IDEASv1_active.cell_type_results.txt", sep="\t", header=T)
+res_IDEASv1_active[["bip"]] <- read.table("/Users/mary/non_dropbox/exps/ldsc/bip_stahl_cts_IDEASv1_active.cell_type_results.txt", sep="\t", header=T)
+res_IDEASv1_active[["mdd"]] <- read.table("/Users/mary/non_dropbox/exps/ldsc/mdd_mvp_cts_IDEASv1_active.cell_type_results.txt", sep="\t", header=T)
+res_IDEASv1_active[["alz"]] <- read.table("/Users/mary/non_dropbox/exps/ldsc/alz_jansen_cts_IDEASv1_active.cell_type_results.txt", sep="\t", header=T)
+res_IDEASv1_active[["bmi"]] <- read.table("/Users/mary/non_dropbox/exps/ldsc/bmi_pulit_cts_IDEASv1_active.cell_type_results.txt", sep="\t", header=T)
+res_IDEASv1_active[["asd"]] <- read.table("/Users/mary/non_dropbox/exps/ldsc/asd_grove_cts_IDEASv1_active.cell_type_results.txt", sep="\t", header=T)
+res_IDEASv1_active[["adhd"]] <- read.table("/Users/mary/non_dropbox/exps/ldsc/adhd_demontis_cts_IDEASv1_active.cell_type_results.txt", sep="\t", header=T)
+res_IDEASv1_active[["ra"]] <- read.table("/Users/mary/non_dropbox/exps/ldsc/ra_osaka_cts_IDEASv1_active.cell_type_results.txt", sep="\t", header=T)
+
+res_IDEASv1_active %<>% map(function(x) {x$EID <- stringr::str_extract(x$Name, "[^_]+"); return(x)})
+
+# Merge with roadmap names by EID
+res_IDEASv1_active %<>% map(function(x) dplyr::left_join(x, roadmap_names, by="EID"))
+
+# Drop cell lines
+res_IDEASv1_active %<>% map(function(x) dplyr::filter(x,!type_mini=="IPSC / ESC / ESC-derived")) 
+other_lines <- c("K562 Leukemia Cells", "HSMM cell derived Skeletal Muscle Myotubes Cells","HSMM Skeletal Muscle Myoblasts Cells","HepG2 Hepatocellular Carcinoma Cell Line","HeLa-S3 Cervical Carcinoma Cell Line","GM12878 Lymphoblastoid Cells","Dnd41 TCell Leukemia Cell Line","A549 EtOH 0.02pct Lung Carcinoma Cell Line","Mesenchymal Stem Cell Derived Adipocyte Cultured Cells","Adipose Derived Mesenchymal Stem Cell Cultured Cells","IMR90 fetal lung fibroblasts Cell Line","Mesenchymal Stem Cell Derived Chondrocyte Cultured Cells","Bone Marrow Derived Cultured Mesenchymal Stem Cells","Muscle Satellite Cultured Cells","Primary hematopoietic stem cells short term culture","Ganglion Eminence derived primary cultured neurospheres","Cortex derived primary cultured neurospheres") 
+res_IDEASv1_active %<>% map(function(x) dplyr::filter(x,!name %in% other_lines)) 
+
+map(res_IDEASv1_active, nrow) # 88 tissues
+
+# And do FDR within each disease
+res_IDEASv1_active %<>% map(function(x) {x$FDR <- p.adjust(x$Coefficient_P_value); return(x)})
+
+# Convert to df
+res <- dplyr::bind_rows(res_IDEASv1_active, .id = "condition")
+head(res)
+
+save(res, file = here("res/res_IDEASv1_active.RData"))
+```
+
+Order of immune cells for plotting by cell subset type
+```{r}
+
+immune_order_by_cell <- rev(c("Primary B cells from cord blood", 
+                      "Primary B cells from peripheral blood", 
+                      "Primary Natural Killer cells from peripheral blood",
+                      "Primary T cells from cord blood",
+                      "Primary T cells from peripheral blood",
+                      "Primary T regulatory cells from peripheral blood" ,
+                      "Primary T helper cells from peripheral blood", 
+                      "Primary T helper naive cells from peripheral blood 1", 
+                      "Primary T helper naive cells from peripheral blood 2",
+                      "Primary T helper memory cells from peripheral blood 1",
+                      "Primary T helper memory cells from peripheral blood 2",
+                      "Primary T helper cells PMA-I stimulated",  
+                      "Primary T helper 17 cells PMA-I stimulated",
+                      "Primary T CD8+ naive cells from peripheral blood",
+                      "Primary T CD8+ memory cells from peripheral blood",
+                      "Primary T cells effector/memory enriched from peripheral blood", 
+                      "Primary neutrophils from peripheral blood", 
+                      "Primary monocytes from peripheral blood",
+                      "Monocytes-CD14+ RO01746 Primary Cells", 
+                      "Primary hematopoietic stem cells G-CSF-mobilized Female",                                
+                      "Primary hematopoietic stem cells G-CSF-mobilized Male",  
+                      "Primary hematopoietic stem cells", 
+                      "Primary mononuclear cells from peripheral blood",
+                      "Thymus",
+                      "Fetal Thymus",
+                      "Spleen"))
+
+save(immune_order_by_cell, file=here("res/immune_order_by_cell.RData"))
+
+```
+
+Cross-disorder immune tile plot
+```{r}
+
+library(viridis)
+res_immune <- res %>% dplyr::filter(type_mini=="Blood/immune")
+res_immune$Significance <- factor(cut(res_immune$Coefficient_P_value, breaks=c(0, 0.05, 1), labels=c("P(raw)<0.05","Not sig")), levels=c("Not sig","P(raw)<0.05"), ordered=T)
+                               
+# And add p-value rank within immune cells (ranks smallest to largest)
+res_immune <- res_immune %>% group_by(condition) %>% mutate(immune_rank=rank(Coefficient_P_value))
+
+# Order to allow ordering y-axis by the ranks in cross-disorder 
+immune_order <- res_immune %>% filter(condition=="xdiss") %>% arrange(Coefficient_P_value) %>% pull(name)
+res_immune$name <- factor(res_immune$name, levels=immune_order, ordered=T)
+
+# Print top results, and check sign of coefficient for these
+x <- as.data.frame(res_immune %>% arrange(Coefficient_P_value) %>% filter(Coefficient_P_value<0.05) %>% select(condition, name, Coefficient, Coefficient_P_value, FDR))
+print(x)
+write.table(x, quote=F, row.names = F, sep="\t", file = here(paste0("res/integrate_immune_ranks_active_allconditions_significant.csv")))
+
+# Now recode disease names
+fct_reorg <- function(fac, ...) {
+  fct_recode(fct_relevel(fac, ...), ...)
+}
+res_immune$condition %<>% fct_reorg("Cross-disorder psych"="xdiss","Schizophrenia"="szs", "Bipolar disorder"="bip", "Depression"="mdd","Autism"="asd","ADHD"="adhd","BMI"="bmi","Alzheimer's"="alz","Rheumatoid arthritis"="ra")
+
+# Switche to ordering by groups of cells
+res_immune$name %<>% factor(levels=immune_order_by_cell)
+
+# FIGURE
+width=6.7
+height=5.9
+res_immune$Significance3 <- factor(ifelse(res_immune$FDR<0.05, "FDR P<0.05", ifelse(res_immune$Coefficient_P_value<0.05, "raw P<0.05","Not sig")), levels=c("Not sig","raw P<0.05","FDR P<0.05"), ordered=T)
+ggplot(res_immune, aes(x=condition, y=name, fill=immune_rank, size=Significance3)) +  geom_point(shape=22) + scale_fill_viridis(name = "Cell type rank\n(by significance)", direction = -1) + scale_size_manual(values=c(1,3,5)) + theme_bw() + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust=0.5), legend.title = element_text(size=10)) + xlab("") + ylab("") + guides(fill=guide_colorbar(reverse=T))
+ggsave(filename = here("pics/integrate_immune_ranks_3level.pdf"), width = width, height=height)
+
+```
+
+Cross-disorder brain tile plot
+```{r}
+
+res_brain <- res %>% dplyr::filter(group=="Brain")
+res_brain$Significance <- factor(cut(res_brain$Coefficient_P_value, breaks=c(0, 0.05, 1), labels=c("P(raw)<0.05","Not sig")), levels=c("Not sig","P(raw)<0.05"), ordered=T)
+                               
+res_brain <- res_brain %>% group_by(condition) %>% mutate(brain_rank=rank(Coefficient_P_value))
+brain_order <- res_brain %>% filter(condition=="xdiss") %>% arrange(Coefficient_P_value) %>% pull(name)
+res_brain$name <- factor(res_brain$name, levels=brain_order, ordered=T)
+res_brain$condition %<>% fct_reorg("Cross-disorder psych"="xdiss","Schizophrenia"="szs", "Bipolar disorder"="bip", "Depression"="mdd","Autism"="asd","ADHD"="adhd","BMI"="bmi","Alzheimer's"="alz", "Rheumatoid arthritis"="ra")
+
+# FIGURE
+res_brain$Significance3 <- factor(ifelse(res_brain$FDR<0.05, "FDR P<0.05", ifelse(res_brain$Coefficient_P_value<0.05, "raw P<0.05","Not sig")), levels=c("Not sig","raw P<0.05","FDR P<0.05"), ordered=T)
+ggplot(res_brain, aes(x=condition, y=name, fill=brain_rank, size=Significance3)) +  geom_point(shape=22) + scale_fill_viridis(name = "Cell type rank\n(by significance)", direction = -1) + scale_size_manual(values=c(1,3,5)) + theme_bw() + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust=0.5), legend.title = element_text(size=10)) + xlab("") + ylab("") + guides(fill=guide_colorbar(reverse=T))
+ggsave(filename = here("pics/integrate_brain_ranks_3level.pdf"), width = 5.3, height=3.3)
+
+```
+
+SUPPLEMENTARY TABLE
+Print, for all conditions, condition; tissue type; coefficient; coefficient SD; p-value
+```{r}
+
+# Write results list to multiple sheets, one per disorder
+library(writexl)
+x <- lapply(res_IDEASv1_active, function(x) {as.data.frame(x %>% arrange(Coefficient_P_value) %>% select(EID, name, Coefficient, Coefficient_std_error, Coefficient_P_value, FDR))})
+write_xlsx(x, format_headers=T, col_names = T, path = here("res/table_S4.xlsx"))
+
+```
+
+```{r}
+
+sessionInfo()
+
+```
+

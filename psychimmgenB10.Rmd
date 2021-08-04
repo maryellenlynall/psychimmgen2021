@@ -1,0 +1,61 @@
+---
+title: "Z-test to compare results for stimulated vs. unstimulated immune cells"
+output: html_document
+---
+Two-sample z-test 
+
+Z = (x_A - mu_A) - (x_B - mu_B) / sqrt(sigma_A^2 + sigma_B^2)
+
+Mu and sigma are identical across annotations, as peaks are called across the entire dataset, thus:
+
+Z = (x_A - x_B) / sqrt(2*sigma^2)
+
+Also, for a uniform distribution:
+sigma (standard error of mean) = sqrt ((N^2-1)/12n)
+
+Thus:
+
+Z = (x_A - x_B) / sqrt((N^2-1)/6n)
+
+N = the total number of peaks
+n = the number of SNPs overlapping peaks
+x = observed mean specificity rank for a given annotation
+
+Note that mu is constant across runs of CHEERS with a given epigenetic dataset, but sigma varies as it also depends on n (number of SNP-peak overlaps)
+```{r}
+
+setwd("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+library(here)
+library(tidyverse)
+
+# Read in x (observed mean specificity rank) and sigma (Distribution sd)
+
+# Load expected mean value
+meanrank <- read.table(here("res/cheersout_500/crossdis_cytoimmgen_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# Load sigma value
+logfile <- read.table(here("res/cheersout_500/crossdis_cytoimmgen_H3K27ac.log"), sep="\t")
+
+sigma <- logfile[logfile$V1=="Distribution sd","V2"]
+
+zscore_uniform <- function(name, x_A, x_B, sigma){
+  print(name)
+  # Set x_A as the stimulated condition (i.e. expected higher mean specificity rank)
+  z <- (x_A - x_B) / sqrt(2*sigma^2)
+  print(sprintf('z=%f',z))
+  p <- pnorm(z, mean = 0, sd = 1, lower.tail = FALSE)
+  print(sprintf('p=%f',p))
+}
+
+conditions_stimulated <- c("IFNB_vs_unstim"="memory_D5_IFNB","IL10_vs_unstim"="memory_D5_IL10","IL21_vs_unstim"="memory_D5_IL21","IL27_vs_unstim"="memory_D5_IL27","ITREG_vs_unstim"="memory_D5_ITREG","TH0_vs_unstim"="memory_D5_TH0","TH1_vs_unstim"="memory_D5_TH1","TH17_vs_unstim"="memory_D5_TH17","TH2_vs_unstim"="memory_D5_TH2","TNFA_vs_unstim"="memory_D5_TNFA")
+
+for (t in 1:length(conditions_stimulated)){
+  zscore_uniform(names(conditions_stimulated[t]), 
+               x_A=meanrank %>% filter(V1==conditions_stimulated[t]) %>% pull("V2"),
+               x_B=meanrank %>% filter(V1=="memory_D5_UNS") %>% pull("V2"),
+               sigma=sigma
+               )
+}
+
+```
+

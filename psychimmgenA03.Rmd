@@ -1,0 +1,107 @@
+---
+title: "Make ldcts, annotations, then partition LD scores for the active elements"
+output: html_document
+---
+```{bash}
+# Downloaded 1000G_Phase3_plinkfiles.tgz from https://data.broadinstitute.org/alkesgroup/LDSCORE/1000G_Phase3_plinkfiles.tgz on 20200922 (contains .bed, .bim and .fam files for each chromosome)
+# Downloaded hapmap3_snps.tgz to get hm.22.snp from https://data.broadinstitute.org/alkesgroup/LDSCORE/hapmap3_snps.tgz
+
+LDSCDIR=/Users/mary/non_dropbox/exps/ldsc
+cd $LDSCDIR
+
+conda deactivate # to get out of python3
+conda activate ldsc
+
+FORLDSCDIR=~/Library/Mobile\ Documents/com~apple~CloudDocs/Documents/research/exps/forldsc
+LDSCDIR=/Users/mary/non_dropbox/exps/ldsc
+IDEASDIR=/Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/tmp/ENCODE/IDEAS
+
+mkdir -p $LDSCDIR/IDEASv1_ldscores
+```
+
+# Make the ldcts file
+```{r}
+
+library(curl)
+library(RCurl)
+meta.file <- getURLContent("http://bx.psu.edu/~yuzhang/Roadmap_ideas/trackDb_test.txt")
+meta.file <- unlist(strsplit(meta.file, "\n"))
+urls <- gsub("bigDataUrl ", "", grep("bigDataUrl", meta.file, value = T))
+tissues <- gsub("shortLabel ", "", grep("shortLabel", meta.file, value = T))
+tissue.ids <- gsub("^(E[0-9]+).*", "\\1", tissues)
+ideas.table <- data.frame(tissue.id = tissue.ids, tissues=tissues, url = urls, stringsAsFactors = F)
+# Add prefix in format that ldsc needs
+ideas.table$prefix <- paste0("IDEASv1_ldscores/","IDEASv1_active_",ideas.table$tissue.id,".")
+
+ldscdir <- "/Users/mary/non_dropbox/exps/ldsc/"
+ideasdir <- "/Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/tmp/ENCODE/IDEAS/"
+
+write.table(ideas.table %>% dplyr::select(tissues, prefix), file=paste0(ldscdir,"IDEASv1_active.ldcts"), sep="\t", col.names = FALSE, row.names = FALSE, quote = FALSE)
+
+# Write list of tissues and chromosomes for bash arrays
+write.table(ideas.table %>% dplyr::pull(tissue.id), file=paste0(ldscdir,"IDEASv1_ldscores/tissues.txt"), col.names = FALSE, row.names = FALSE, quote = FALSE)
+
+write.table(1:22, file=paste0(ideasdir,"chromosomes.txt"), col.names = FALSE, row.names = FALSE, quote = FALSE)
+
+```
+
+Make annot files from bed
+```{bash}
+
+tissues=(`cat "$LDSCDIR/IDEASv1_ldscores/tissues.txt"`)
+chromosomes=(`cat "$IDEASDIR/chromosomes.txt"`)
+
+# NB. Making annot files is slow; making LDSCORES (later) is v slow.
+for TISSUE in "${tissues[@]}"
+  do
+  echo $TISSUE
+  for CHR in "${chromosomes[@]}"
+    do
+    echo $CHR
+    if [[ -f ${LDSCDIR}/IDEASv1_ldscores/IDEASv1_active_${TISSUE}.${CHR}.annot.gz ]]; then
+      echo "Annot already made"
+    else
+      echo "Making annot"
+      python ${LDSCDIR}/make_annot.py \
+--bed-file ${IDEASDIR}/${TISSUE}.active.bed.gz \
+--bimfile ${LDSCDIR}/1000G_EUR_Phase3_plink/1000G.EUR.QC.${CHR}.bim \
+--annot-file $LDSCDIR/IDEASv1_ldscores/IDEASv1_active_${TISSUE}.${CHR}.annot.gz
+    fi
+    done
+  done
+
+# Sanity check 
+cd $IDEASDIR
+gzip -cd IDEASv1_ldscores/IDEASv1_active_E001.22.annot.gz | wc -l
+gzip -cd IDEASv1_ldscores/IDEASv1_active_E001.22.annot.gz | awk -F ',' '{print $1}' | sort | uniq -c
+```
+
+Make partitioned LD scores. Output needs to have same prefix as annot file made above and be in same directory.
+```{bash}
+
+cd $LDSCDIR
+awk '{if ($1!="SNP") {print $1} }' w_hm3.snplist > listHM3.txt
+
+for TISSUE in "${tissues[@]}"
+  do
+  echo $TISSUE
+  for CHR in "${chromosomes[@]}"
+    do
+    echo $CHR
+    if [[ -f ${LDSCDIR}/IDEASv1_ldscores/IDEASv1_active_${TISSUE}.${CHR}.l2.ldscore.gz ]]; then
+      echo "LDSCORES already made"
+    else
+      echo "Making partitioned LDSCORES"
+    python ${LDSCDIR}/ldsc.py \
+--l2 \
+--bfile ${LDSCDIR}/1000G_EUR_Phase3_plink/1000G.EUR.QC.${CHR} \
+--ld-wind-cm 1 \
+--annot ${LDSCDIR}/IDEASv1_ldscores/IDEASv1_active_${TISSUE}.${CHR}.annot.gz \
+--thin-annot \
+--out ${LDSCDIR}/IDEASv1_ldscores/IDEASv1_active_${TISSUE}.${CHR} \
+--print-snps ${LDSCDIR}/listHM3.txt
+    fi
+    done
+  done
+
+```

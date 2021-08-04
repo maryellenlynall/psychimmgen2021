@@ -1,0 +1,117 @@
+---
+title: "Convert harmonized tsv to parquet format"
+output: html_document
+---
+
+Generate median INFO column for cross-disorders sumstats
+```{bash}
+SUMSTATS=/nfs/team205/MRC_lab/mel41/summary_stats/hg38/
+TARGETDIR=/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/
+cd $TARGETDIR
+
+# Get INFO scores from component studies
+awk -F'\t' 'NR<8{print $24}' $SUMSTATS/crossdisorder_lee2019_hg38_harmonised.qc.tsv 
+awk -F'\t' 'NR==1{print "a,b,c,d,e,f,g,h"} NR>1{print $24}' $SUMSTATS/crossdisorder_lee2019_hg38_harmonised.qc.tsv > tmp.tsv
+
+R
+IMPINFO <- read.csv("/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/tmp.tsv")
+INFO <- apply(IMPINFO,1,function(x){median(x, na.rm=T)})
+# First should be 0.8375
+head(INFO)
+write.csv(INFO, file="/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/tmp2.tsv", row.names=FALSE, quote=FALSE)
+quit()
+
+# Combine files
+paste -d'\t' tmp2.tsv $SUMSTATS/crossdisorder_lee2019_hg38_harmonised.qc.tsv > $SUMSTATS/crossdisorder_lee2019_hg38_harmonised2.qc.tsv
+sed -i '1s/x\t/INFO\t/' $SUMSTATS/crossdisorder_lee2019_hg38_harmonised2.qc.tsv
+head $SUMSTATS/crossdisorder_lee2019_hg38_harmonised2.qc.tsv -n2
+
+mv $SUMSTATS/crossdisorder_lee2019_hg38_harmonised2.qc.tsv $SUMSTATS/crossdisorder_lee2019_hg38_harmonised.qc.tsv
+```
+
+```{bash}
+
+# Get af.gnomad_nfe column (European) and save as smaller parquet
+
+THREADS=1
+MEM=60000 # 60000 was beneficial - the job used right up to this memory level! At 25000 was hanging over 24hrs
+bsub -q normal -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "python get_hg38_cols_from_gnomad_parquet.py > log_get_hg38_cols_from_gnomad_parquet.py.txt"
+
+```
+
+Convert sumstats tsvs to parquet, plus addition of gnomad allele frequencies where allele frequency not available publicly
+```{bash}
+SUMSTATS=/nfs/team205/MRC_lab/mel41/summary_stats/hg38/
+TARGETDIR=/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/
+cd $TARGETDIR
+
+# BIPSTAHL: cases=20352 controls=31358 = 51710 total
+f=bip_stahl2018_hg38
+head $SUMSTATS/${f}_harmonised.qc.tsv -n 2 # Check columns
+THREADS=1
+MEM=30000 
+bsub -q normal -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "python tsv2parquet_ingest.py -inFile $SUMSTATS/${f}_harmonised.qc.tsv -outFile $TARGETDIR/filtered/parquets/${f}.parquet -min_mac 10 -n_cases 20352 -n_total 51710 -in_af '/nfs/team205/MRC_lab/mel41/gnomad/variant-annotation-hg38cols.parquet' -min_rows 10000 > log_toparquet_${f}.txt"
+
+# ASD --N-cas 18382 --N-con 27969 --> ntotal = 46351
+f=asd_grove2017_hg38
+head $SUMSTATS/${f}_harmonised.qc.tsv -n 2 
+THREADS=1
+MEM=30000 
+bsub -q normal -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "python tsv2parquet_ingest.py -inFile $SUMSTATS/${f}_harmonised.qc.tsv -outFile $TARGETDIR/filtered/parquets/${f}.parquet -min_mac 10 -n_cases 18382 -n_total 46351 -in_af '/nfs/team205/MRC_lab/mel41/gnomad/variant-annotation-hg38cols.parquet' -min_rows 10000 > log_toparquet_${f}.txt"
+
+# ADHD --N-cas 19099 --N-con 34194 --> ntotal = 53293
+f=adhd_demontis2017_hg38
+head $SUMSTATS/${f}_harmonised.qc.tsv -n 2 
+THREADS=1
+MEM=30000 
+bsub -q normal -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "python tsv2parquet_ingest.py -inFile $SUMSTATS/${f}_harmonised.qc.tsv -outFile $TARGETDIR/filtered/parquets/${f}.parquet -min_mac 10 -n_cases 19099 -n_total 53293 -in_af '/nfs/team205/MRC_lab/mel41/gnomad/variant-annotation-hg38cols.parquet' -min_rows 10000 > log_toparquet_${f}.txt"
+
+# ALZ 
+# 71,880 cases, 383,378 controls --> ntotal = 455258
+f=alz_jansen2019_hg38 
+head $SUMSTATS/${f}_harmonised.qc.tsv -n 2 
+awk 'BEGIN {FS=OFS="\t"}; {print $11, $24, $29}' $SUMSTATS/${f}_harmonised.qc.tsv | head
+THREADS=1
+MEM=30000 
+bsub -q normal -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "python tsv2parquet_ingest.py -inFile $SUMSTATS/${f}_harmonised.qc.tsv -outFile $TARGETDIR/filtered/parquets/${f}.parquet -min_mac 10 -n_cases 71880 -n_total 455258 -in_af '/nfs/team205/MRC_lab/mel41/gnomad/variant-annotation-hg38cols.parquet' -min_rows 10000 > log_toparquet_${f}.txt"
+
+# MDD --N 846913 --N-cas 264984 --N-con 581929
+f=mdd_mvp2020_hg38
+head $SUMSTATS/${f}_harmonised.qc.tsv -n 2 
+THREADS=1
+MEM=30000 
+bsub -q normal -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "python tsv2parquet_ingest.py -inFile $SUMSTATS/${f}_harmonised.qc.tsv -outFile $TARGETDIR/filtered/parquets/${f}.parquet -min_mac 10 -n_cases 264984 -n_total 846913 -in_af '/nfs/team205/MRC_lab/mel41/gnomad/variant-annotation-hg38cols.parquet' -min_rows 10000 > log_toparquet_${f}.txt"
+
+# SZS --N 150064 --N-cas 36989 --N-con 113075
+f=szs_ripke2014_hg38
+head $SUMSTATS/${f}_harmonised.qc.tsv -n 2 
+THREADS=1
+MEM=30000 
+bsub -q normal -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "python tsv2parquet_ingest.py -inFile $SUMSTATS/${f}_harmonised.qc.tsv -outFile $TARGETDIR/filtered/parquets/${f}.parquet -min_mac 10 -n_cases 36989 -n_total 150064 -in_af '/nfs/team205/MRC_lab/mel41/gnomad/variant-annotation-hg38cols.parquet' -min_rows 10000 > log_toparquet_${f}.txt"
+
+# CROSSDIS
+f=crossdisorder_lee2019_hg38
+head $SUMSTATS/${f}_harmonised.qc.tsv -n 2 
+THREADS=1
+MEM=30000 
+bsub -q normal -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "python tsv2parquet_ingest.py -inFile $SUMSTATS/${f}_harmonised.qc.tsv -outFile $TARGETDIR/filtered/parquets/${f}.parquet -min_mac 10 -n_cases 232964 -n_total 727126 -in_af '/nfs/team205/MRC_lab/mel41/gnomad/variant-annotation-hg38cols.parquet' -min_rows 10000 > log_toparquet_${f}.txt"
+
+# BMI # N = 806834
+f=bmi_pulit2018_hg38
+head $SUMSTATS/${f}_harmonised.qc.tsv -n 2 # Has INFO column
+THREADS=1
+MEM=30000 
+bsub -q normal -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "python tsv2parquet_ingest.py -inFile $SUMSTATS/${f}_harmonised.qc.tsv -outFile $TARGETDIR/filtered/parquets/${f}.parquet -min_mac 10 -n_total 806834 -in_af '/nfs/team205/MRC_lab/mel41/gnomad/variant-annotation-hg38cols.parquet' -min_rows 10000 > log_toparquet_${f}.txt"
+
+# RA # Ntotal 58284 --N-cas 14361 --N-con 43923
+f=ra_okada2014_hg38
+head $SUMSTATS/${f}_harmonised.qc.tsv -n 2 
+THREADS=1
+MEM=30000 
+bsub -q normal -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "python tsv2parquet_ingest.py -inFile $SUMSTATS/${f}_harmonised.qc.tsv -outFile $TARGETDIR/filtered/parquets/${f}.parquet -min_mac 10 -n_cases 14361 -n_total 58284 -in_af '/nfs/team205/MRC_lab/mel41/gnomad/variant-annotation-hg38cols.parquet' -min_rows 10000 > log_toparquet_${f}.txt"
+
+```
+
+
+
+

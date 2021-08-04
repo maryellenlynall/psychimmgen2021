@@ -1,0 +1,523 @@
+---
+title: "Process and visualise Soskic dataset (cytoimmgen) CHEERS results"
+output: html_document
+---
+
+```{r}
+
+library(ggplot2)
+library(tidyverse)
+#set_here("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+setwd("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+library(here)
+```
+
+Load cytoimmgen enhancer results
+```{r}
+
+cytoimmgen_H3K27ac_p <- list()
+cytoimmgen_H3K27ac_meanrank <- list()
+
+# XDISS
+cytoimmgen_H3K27ac_p[["Crossdisorder psych"]] <- read.table(here("res/cheersout_500/crossdis_cytoimmgen_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+cytoimmgen_H3K27ac_meanrank[["Crossdisorder_psych"]] <- read.table(here("res/cheersout_500/crossdis_cytoimmgen_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# SZS
+cytoimmgen_H3K27ac_p[["Schizophrenia"]] <- read.table(here("res/cheersout_500/szs_cytoimmgen_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+cytoimmgen_H3K27ac_meanrank[["Schizophrenia"]] <- read.table(here("res/cheersout_500/szs_cytoimmgen_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# ALZ
+cytoimmgen_H3K27ac_p[["Alzheimer's Disease"]] <- read.table(here("res/cheersout_500/alz_cytoimmgen_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+cytoimmgen_H3K27ac_meanrank[["Alzheimer's Disease"]] <- read.table(here("res/cheersout_500/alz_cytoimmgen_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# BMI
+cytoimmgen_H3K27ac_p[["BMI"]] <- read.table(here("res/cheersout_500/bmi_cytoimmgen_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+cytoimmgen_H3K27ac_meanrank[["BMI"]] <- read.table(here("res/cheersout_500/bmi_cytoimmgen_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# ADHD
+cytoimmgen_H3K27ac_p[["ADHD"]] <- read.table(here("res/cheersout_500/adhd_cytoimmgen_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+cytoimmgen_H3K27ac_meanrank[["ADHD"]] <- read.table(here("res/cheersout_500/adhd_cytoimmgen_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# MDD
+cytoimmgen_H3K27ac_p[["Depression"]] <- read.table(here("res/cheersout_500/mdd_cytoimmgen_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+cytoimmgen_H3K27ac_meanrank[["Depression"]] <- read.table(here("res/cheersout_500/mdd_cytoimmgen_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# BPD
+cytoimmgen_H3K27ac_p[["Bipolar Disorder"]] <- read.table(here("res/cheersout_500/bip_cytoimmgen_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+cytoimmgen_H3K27ac_meanrank[["Bipolar Disorder"]] <- read.table(here("res/cheersout_500/bip_cytoimmgen_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# RA
+cytoimmgen_H3K27ac_p[["Rheumatoid arthritis"]] <- read.table(here("res/cheersout_500/ra_cytoimmgen_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+cytoimmgen_H3K27ac_meanrank[["Rheumatoid arthritis"]] <- read.table(here("res/cheersout_500/ra_cytoimmgen_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+
+```
+
+
+
+```{r}
+
+library(purrr)
+library(magrittr)
+chm <- purrr::map_df(cytoimmgen_H3K27ac_p, ~as.data.frame(.x), .id="condition")
+chm %<>% dplyr::rename(cell_condition=V1,value=V2)
+chm$condition <- factor(chm$condition , levels = c("Crossdisorder psych","Schizophrenia","Bipolar Disorder", "Depression", "ADHD", "BMI", "Alzheimer's Disease", "Rheumatoid arthritis"))
+# Note no ASD as insufficient hits
+head(chm)
+
+df <- read.table(here("res/cheersout_500/cytoimmgen_celltypes.txt"), header=F)
+colnames(df) <- "cell_condition"
+df %<>% separate(cell_condition, into=c("category","time","cell_type"), sep="_", remove=F)
+head(df)
+
+cytoimmgen_ncomparisons <- dim(df)[1]
+print(cytoimmgen_ncomparisons)
+
+# Rename the timepoints
+df$cell_time <- ifelse(df$time=="6H", "macrophage_6H", ifelse(
+  df$time=="24H", "macrophage_24H", ifelse(
+    df$time=="D5" & df$category=="memory", "memory_D5", ifelse(
+      df$time=="D5" & df$category=="naive", "naive_D5", ifelse(
+        df$time=="16H" & df$category=="memory","memory_16H", ifelse(
+          df$time=="16H" & df$category=="naive","naive_16H", NA))))))
+
+chm_melt <- left_join(chm, df, by="cell_condition")
+head(chm_melt)
+
+```
+
+
+```{r}
+
+cytoimmgen_celllist <- rev(c('naive_16H_UNS', 'naive_D5_UNS','memory_16H_UNS', 'memory_D5_UNS',  'naive_16H_TH0', 'naive_16H_TH1', 'naive_16H_TH2', 'naive_16H_TH17', 'naive_16H_ITREG', 'naive_16H_IL10', 'naive_16H_IL21', 'naive_16H_IL27', 'naive_16H_IFNB', 'naive_16H_TNFA', 'naive_D5_TH0',  'naive_D5_TH1', 'naive_D5_TH2', 'naive_D5_TH17', 'naive_D5_ITREG', 'naive_D5_IL10', 'naive_D5_IL21', 'naive_D5_IL27', 'naive_D5_IFNB', 'naive_D5_TNFA', 'memory_16H_TH0', 'memory_16H_TH1', 'memory_16H_TH2', 'memory_16H_TH17', 'memory_16H_ITREG', 'memory_16H_IL10', 'memory_16H_IL21', 'memory_16H_IL27', 'memory_16H_IFNB', 'memory_16H_TNFA', 'memory_D5_TH0', 'memory_D5_TH1', 'memory_D5_TH2', 'memory_D5_TH17', 'memory_D5_ITREG', 'memory_D5_IL10', 'memory_D5_IL21', 'memory_D5_IL27', 'memory_D5_IFNB', 'memory_D5_TNFA',  'macrophage_6H_UNS', 'macrophage_24H_UNS', 'macrophage_6H_IFNG', 'macrophage_6H_IL4', 'macrophage_6H_IL26', 'macrophage_6H_TNFA', 'macrophage_24H_IFNG', 'macrophage_24H_IL4', 'macrophage_24H_IL23', 'macrophage_24H_IL26', 'macrophage_24H_TNFA'))
+
+timepointlabeller = c("macrophage_24H"="#A6761D","macrophage_6H" = "#E6AB02", "memory_D5" = "#7570B3", 'memory_16H' = "#E7298A", "naive_D5" =  "#1B9E77", "naive_16H" =  "#D95F02")
+
+```
+
+```{r}
+ncomp=cytoimmgen_ncomparisons
+
+chm_melt$value[chm_melt$value == 0] <- 1e-16
+
+# Order for graph
+chm_melt$cell_condition <- factor(chm_melt$cell_condition, levels=cytoimmgen_celllist)
+chm_melt$cell_time <- factor(chm_melt$cell_time, levels=c("macrophage_24H", "macrophage_6H","memory_D5",'memory_16H',"naive_D5","naive_16H"))
+
+library(viridis)
+chm_melt$Significance <- factor(ifelse(chm_melt$value<(0.05/ncomp), "Bonf P<0.05", ifelse(chm_melt$value<0.05, "raw P<0.05","Not sig")), levels=c("Not sig","raw P<0.05","Bonf P<0.05"), ordered=T)
+                               
+# And add p-value rank (ranks smallest to largest)
+chm_melt <- chm_melt %>% group_by(condition) %>% mutate(immune_rank=rank(value))
+
+# Print top results
+x <- as.data.frame(chm_melt %>% arrange(condition, value) %>% filter(value<0.05) %>% select(condition, cell_condition, value, category, time, cell_type, cell_time))
+print(x)
+write.table(x, quote=F, row.names = F, sep="\t", file = here(paste0("res/CHEERS_cytoimmgen_allconditions_significant.csv")))
+
+```
+
+FIGURES
+
+```{r}
+# Close-up on Xdiss, SZS, MDD, BMI, AD 
+p <- ggplot(chm_melt[chm_melt$condition %in% c("Crossdisorder psych","Schizophrenia","Depression","BMI","Alzheimer's Disease"),], aes(cell_condition, -log10(value))) + 
+  geom_bar(aes(fill = cell_time), position = "dodge", stat="identity")  +
+  facet_wrap(~condition, scale="free_x", ncol = 5) +
+  ylab(bquote(~'-log' [10]~ 'p-value')) + 
+  xlab("") +
+  scale_x_discrete(breaks = chm_melt$cell_condition, labels=chm_melt$cell_type) + 
+  geom_hline(yintercept = -log10(0.05), linetype="dotted", color = 'black') + 
+  geom_hline(yintercept = -log10(0.05/ncomp), color = 'black') +
+  theme(axis.text = element_text(size = 12), 
+        axis.title = element_text(size = 15), 
+        panel.grid = element_blank(), 
+        axis.ticks = element_blank(),
+        axis.text.y  = element_text(size=10),
+        panel.background = element_rect(color="light grey",fill=NA),
+        legend.background = element_blank())+ 
+  coord_flip() + 
+  scale_fill_manual("Cell group", values=timepointlabeller, guide = guide_legend(reverse = TRUE)) 
+p
+ggsave(p, filename = "CHEERS_cytoimmgen_enhancers_mini_forAI.pdf", path=here("pics"), width=9.7, height=7)
+
+# FIGURE: version for supplement showing all disorders. 
+p <- ggplot(chm_melt, aes(cell_condition, -log10(value))) + 
+  geom_bar(aes(fill = cell_time), position = "dodge", stat="identity")  +
+  facet_wrap(~condition, scale="free_x", ncol = 4) +
+  ylab(bquote(~'-log' [10]~ 'p-value')) + 
+  xlab("") +
+  scale_x_discrete(breaks = chm_melt$cell_condition, labels=chm_melt$cell_type) + 
+  geom_hline(yintercept = -log10(0.05), linetype="dotted", color = 'black') + 
+  geom_hline(yintercept = -log10(0.05/ncomp), color = 'black') +
+  theme(axis.text = element_text(size = 12), 
+        axis.title = element_text(size = 15), 
+        panel.grid = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text.y  = element_text(size=10),
+        panel.background = element_rect(color="grey",fill=NA),
+        legend.background = element_blank())+ 
+  coord_flip() + 
+  scale_fill_manual("Cell group", values=timepointlabeller, guide = guide_legend(reverse = TRUE)) 
+p
+ggsave(p, filename = "CHEERS_cytoimmgen_enhancers_all_forAI.pdf", path=here("pics"), width=10, height=14)
+
+```
+
+Prepare data to plot heatmap of individual peaks
+```{r}
+
+anno <- df
+rownames(anno) <- anno$cell_condition
+anno <- data.frame(anno[,c(4,5)])
+head(anno)
+annoCols = list(cell_time = timepointlabeller)
+
+# Mean from uniform distribution Mean is 1/2 (a + b) where a and b are minimum and max; number of peaks is 127723
+mean_cytoimmgen = (1+127723)/2
+
+get_peaks <- function(uniquePeaksFile=NULL, mean=NULL, celllist=NULL){
+  peaks <- read.table(uniquePeaksFile, sep="\t", header=T)
+  row.names(peaks) <- paste(peaks$chr, peaks$start, peaks$end, sep = '_')
+  peaks <- peaks[c("chr", "start", "end", celllist)]
+  peaks <- peaks[,4:dim(peaks)[2]]
+  peaks[1:4,1:4]
+  #Normalize scores by mean
+  peaks <- peaks/mean
+}
+
+# Get peaks
+peaks=list()
+peaks$Depression <- get_peaks(here("res/cheersout_500/mdd_cytoimmgen_H3K27ac_uniquePeaks.txt"), mean=mean_cytoimmgen, celllist=cytoimmgen_celllist)
+peaks$`Crossdisorder psych` <- get_peaks(here("res/cheersout_500/crossdis_cytoimmgen_H3K27ac_uniquePeaks.txt"), mean=mean_cytoimmgen, celllist=cytoimmgen_celllist)
+peaks$Schizophrenia <- get_peaks(here("res/cheersout_500/szs_cytoimmgen_H3K27ac_uniquePeaks.txt"), mean=mean_cytoimmgen, celllist=cytoimmgen_celllist)
+peaks$`Bipolar Disorder` <- get_peaks(here("res/cheersout_500/bip_cytoimmgen_H3K27ac_uniquePeaks.txt"), mean=mean_cytoimmgen, celllist=cytoimmgen_celllist)
+peaks$ADHD <- get_peaks(here("res/cheersout_500/adhd_cytoimmgen_H3K27ac_uniquePeaks.txt"), mean=mean_cytoimmgen, celllist=cytoimmgen_celllist)
+peaks$BMI <- get_peaks(here("res/cheersout_500/bmi_cytoimmgen_H3K27ac_uniquePeaks.txt"), mean=mean_cytoimmgen, celllist=cytoimmgen_celllist)
+peaks$`Alzheimer's Disease` <- get_peaks(here("res/cheersout_500/alz_cytoimmgen_H3K27ac_uniquePeaks.txt"), mean=mean_cytoimmgen, celllist=cytoimmgen_celllist)
+peaks$`Rheumatoid arthritis` <- get_peaks(here("res/cheersout_500/ra_cytoimmgen_H3K27ac_uniquePeaks.txt"), mean=mean_cytoimmgen, celllist=cytoimmgen_celllist)
+
+# Get overlapping SNPs
+cytoimmgen_H3K27ac_snps <- list()
+cytoimmgen_H3K27ac_snps[["Crossdisorder psych"]] <- read.table(here("res/cheersout_500/crossdis_cytoimmgen_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+cytoimmgen_H3K27ac_snps[["Schizophrenia"]] <- read.table(here("res/cheersout_500/szs_cytoimmgen_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+cytoimmgen_H3K27ac_snps[["Alzheimer's Disease"]] <- read.table(here("res/cheersout_500/alz_cytoimmgen_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+cytoimmgen_H3K27ac_snps[["BMI"]] <- read.table(here("res/cheersout_500/bmi_cytoimmgen_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+cytoimmgen_H3K27ac_snps[["ADHD"]] <- read.table(here("res/cheersout_500/adhd_cytoimmgen_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+cytoimmgen_H3K27ac_snps[["Depression"]] <- read.table(here("res/cheersout_500/mdd_cytoimmgen_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+cytoimmgen_H3K27ac_snps[["Bipolar Disorder"]] <- read.table(here("res/cheersout_500/bip_cytoimmgen_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+cytoimmgen_H3K27ac_snps[["Rheumatoid arthritis"]] <- read.table(here("res/cheersout_500/ra_cytoimmgen_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+
+cytoimmgen_H3K27ac_snps <- lapply(cytoimmgen_H3K27ac_snps, function(x){x$X <- NULL; return(x)})
+
+# Subselect SNPs overlapping the peaks of interest
+pull_overlapping_snps = function(choice_peaks, snps){
+  snps$peak <- paste(snps$chr, snps$start, snps$end, sep="_")
+  overlaps <- sapply(choice_peaks, function(x) {snps[snps$peak %in% x,"snp"]}, USE.NAMES = TRUE)
+}
+
+overlaps <- sapply(names(cytoimmgen_H3K27ac_snps), function(x){pull_overlapping_snps(choice_peaks=rownames(peaks[[x]]), snps=cytoimmgen_H3K27ac_snps[[x]])})
+
+```
+
+Make heatmap of individual peaks for crossdisorder
+```{r}
+peaks_choice = peaks$Crossdisorder
+
+#Heatmap of ranks
+library(pheatmap)
+library(RColorBrewer)
+breaksList = seq(1, 2, by = 0.1)
+pheatmap::pheatmap(peaks_choice, 
+         annotation_col =  anno, 
+         annotation_colors = annoCols[1], 
+         border_color = F,
+         color = colorRampPalette(brewer.pal(n = 9, name = "Blues"))(length(breaksList)),
+         breaks = breaksList,
+         treeheight_row = 0, treeheight_col = 0, filename=here("pics/pheatmap_cheers_cytoimmgen_enhancers_peaks_crossdis.pdf"), width=10, height=25)
+# dev.off()
+
+```
+
+Make heatmap of individual peaks for MDD
+```{r}
+peaks_choice = peaks$Depression
+
+#Heatmap of ranks
+library(pheatmap)
+library(RColorBrewer)
+peaks_choice = peaks$Depression
+breaksList = seq(1, 2, by = 0.1)
+pheatmap::pheatmap(peaks_choice, 
+         annotation_col =  anno, 
+         annotation_colors = annoCols[1], 
+         border_color = F,
+         color = colorRampPalette(brewer.pal(n = 9, name = "Blues"))(length(breaksList)),
+         breaks = breaksList, cluster_rows = T, cluster_cols=F,
+         filename=here("pics/pheatmap_cheers_cytoimmgen_enhancers_peaks_dep.pdf"), width=10, height=17
+         )
+
+```
+
+
+FIGURE: Are the T cell overlaps for MDD the same as the peak overlaps for BMI?
+```{r}
+
+print("Number of MDD peaks")
+print(nrow(peaks$Depression)) # 108
+print("Number of BMI peaks")
+print(nrow(peaks$BMI)) # 1022
+
+rownames(peaks$Depression) %in% rownames(peaks$BMI) %>% table() # 9 of 108 total MDD are overlaps with BMI
+
+(repper <- dim(anno)[1])
+
+trying <- merge(peaks$Depression, peaks$BMI, by=0, all.x=T, suffixes=c(".Dep",".BMI"))
+dim(trying)
+rownames(trying) <- trying$Row.names
+trying$Row.names <- NULL
+# Reverse within each condition so x-axis is ordered like other figures
+trying <- trying[,c(seq(repper,1,-1), seq(repper*2,(repper+1),-1))]
+
+# Make Bespoke anno without clustering
+# Must rename in accordance with suffixes above
+anno_dep <- anno 
+rownames(anno_dep) <- paste0(rownames(anno),".Dep")
+anno_bmi <- anno
+rownames(anno_bmi) <- paste0(rownames(anno),".BMI")
+
+# Get peak clustering order from internals of pheatmap using MDD alone, then use this as the fixed order for both BMI and MDD. 
+# Silent pheatmap to get clustering of MDD alone
+out <- pheatmap::pheatmap(peaks$Depression, 
+         cluster_cols = F, silent = T)
+head(out$tree_row$labels)
+head(out$tree_row$order)
+trying[is.na(trying)] <- 0
+trying_reordered <- trying[out$tree_row$labels[out$tree_row$order],]
+annoBespoke <- rbind(anno_dep, anno_bmi)
+annoBespoke$condition <- c(rep("Depression",repper), rep("BMI",repper))
+annoBespoke$cell_type <- NULL
+peaks_choice=trying_reordered # 
+breaksList = seq(1, 2, by = 0.1)
+pheatmap::pheatmap(peaks_choice, 
+         annotation_col =  annoBespoke, 
+         annotation_colors = annoCols[1], 
+         border_color = F,
+         color = colorRampPalette(brewer.pal(n = 9, name = "Blues"))(length(breaksList)),
+         breaks = breaksList,
+         cluster_cols = F, cluster_rows = F, 
+         gaps_col = dim(anno)[1],
+         filename=here("pics/pheatmap_cheers_cytoimmgen_enhancers_peaks_dep_with_bmi_overlapsREV.pdf"), width=17, height=13)
+
+```
+
+Make Venns and upset plot
+```{r}
+
+library(ggVennDiagram)
+x <- list(`Crossdisorder\npsych`=rownames(peaks$Crossdisorder), 
+          Schizophrenia=rownames(peaks$Schizophrenia),
+          Depression=rownames(peaks$Depression),
+          `Rheumatoid\narthritis`=rownames(peaks$`Rheumatoid arthritis`)
+          )
+p <- ggVennDiagram(x, label_alpha=0, label="count") + guides(fill=FALSE)
+p
+ggsave(here("pics/CHEERS_cytoimmgen_enhancers_venn1.pdf"), p, width=7, height=4)
+
+
+x <- list(`Crossdisorder\npsych`=rownames(peaks$Crossdisorder), 
+          Schizophrenia=rownames(peaks$Schizophrenia),
+          Depression=rownames(peaks$Depression),
+          BMI=rownames(peaks$BMI)
+          )
+p <- ggVennDiagram(x, label_alpha=0, label="count") + guides(fill=FALSE)
+p
+ggsave(here("pics/CHEERS_cytoimmgen_enhancers_venn3.pdf"), p, width=7, height=4)
+
+
+x <- list(`Bipolar disorder`=rownames(peaks$`Bipolar Disorder`), 
+          Schizophrenia=rownames(peaks$Schizophrenia),
+          Depression=rownames(peaks$Depression),
+          BMI=rownames(peaks$BMI)
+          )
+p <- ggVennDiagram(x, label_alpha=0, label="count") + guides(fill=FALSE)
+p
+ggsave(here("pics/CHEERS_cytoimmgen_enhancers_venn4.pdf"), p, width=7, height=4)
+
+
+x <- list(`Alzheimer's\nDisease`=rownames(peaks$`Alzheimer's Disease`),
+          `Crossdisorder\npsych`=rownames(peaks$Crossdisorder), 
+          Depression=rownames(peaks$Depression),
+          BMI=rownames(peaks$BMI)
+          )
+p <- ggVennDiagram(x, label_alpha=0, label="count") + guides(fill=FALSE)
+p
+ggsave(here("pics/CHEERS_cytoimmgen_enhancers_venn2.pdf"), p, width=7, height=4)
+
+x <- list(ADHD=rownames(peaks$ADHD),
+          Crossdisorder=rownames(peaks$Crossdisorder), 
+          Depression=rownames(peaks$Depression),
+          BMI=rownames(peaks$BMI)
+          )
+p <- ggVennDiagram(x, label_alpha=0, label="count") + guides(fill=FALSE)
+p
+ggsave(here("pics/CHEERS_cytoimmgen_enhancers_venn5.pdf"), p, width=7, height=4)
+
+library(ComplexHeatmap)
+x <- list(`Crossdisorder psych`=rownames(peaks$Crossdisorder), 
+          Schizophrenia=rownames(peaks$Schizophrenia),
+          `Bipolar disorder`=rownames(peaks$`Bipolar Disorder`), 
+          Depression=rownames(peaks$Depression),
+          ADHD=rownames(peaks$ADHD),
+          BMI=rownames(peaks$BMI),
+          `Alzheimer's Disease`=rownames(peaks$`Alzheimer's Disease`),
+          `Rheumatoid arthritis`=rownames(peaks$`Rheumatoid arthritis`)
+          )
+mtx <- ComplexHeatmap::make_comb_mat(x)
+
+# FIGURE: upset plot
+pdf(file=here("pics/cytoimmgen_upset_intersections.pdf"), width=10, height=6)
+m <- mtx[comb_degree(mtx)>1]
+ComplexHeatmap::UpSet(m, set_order = names(x), 
+                      top_annotation = upset_top_annotation(m, gp = gpar(fill='white'), height = unit(7,"cm"), annotation_name_rot = 0), 
+                      right_annotation = upset_right_annotation(m, gp = gpar(fill='white'), width = unit(7,"cm"), annotation_name_rot = 0))
+
+dev.off()
+
+```
+
+Look at shared peaks for crossdisorder, szs and MDD
+```{r}
+# Union of implicated peaks across Xdiss-MDD-SZS
+
+tmpdep = peaks$Depression[!rownames(peaks$Depression) %in% rownames(peaks$Crossdisorder),]
+tmpszs = peaks$Schizophrenia[!rownames(peaks$Schizophrenia) %in% rownames(peaks$Crossdisorder),]
+union <- rbind(peaks$Crossdisorder, tmpszs, tmpdep)
+dim(union)
+
+# Pheatmap, allowing to cluster, and extract the order of peaks
+
+# Get peak clustering order from internals of pheatmap
+out <- pheatmap::pheatmap(union, cluster_cols = T, silent = T)
+union_reordered <- union[out$tree_row$labels[out$tree_row$order],c(seq(repper,1,-1))]
+
+rowannot <- data.frame(
+  Crossdisorder = as.factor((rownames(union_reordered) %in% rownames(peaks$Crossdisorder))),
+  Schizophrenia = as.factor((rownames(union_reordered) %in% rownames(peaks$Schizophrenia))),
+  Depression = as.factor((rownames(union_reordered) %in% rownames(peaks$Depression))),
+  row.names = rownames(union_reordered)
+)
+head(rowannot)
+
+annoCols = list(cell_time = timepointlabeller,
+                Schizophrenia=c("TRUE"="dark red","FALSE"="light grey"), Crossdisorder=c("TRUE"="dark red","FALSE"="light grey"), Depression=c("TRUE"="dark red","FALSE"="light grey"))
+
+peaks_choice = union_reordered
+
+# View to see all peaks
+library(pheatmap)
+library(RColorBrewer)
+breaksList = seq(1, 2, by = 0.1)
+pheatmap::pheatmap(peaks_choice, 
+         annotation_col =  anno, 
+         annotation_colors = annoCols, 
+         annotation_names_row = T,
+         annotation_row = rowannot,
+         border_color = F,
+         color = colorRampPalette(brewer.pal(n = 9, name = "Blues"))(length(breaksList)),
+         breaks = breaksList,
+         cluster_rows = F, cluster_cols = F,
+         filename=here("pics/pheatmap_cheers_cytoimmgen_enhancers_union_rowannot.pdf"), width=10, height=40)
+
+```
+
+T-cell late activation peaks selected from above plot
+```{r}
+clump_union_late_cd4_activation1 <- c("chr10_102860759_102861039",
+"chr17_18044981_18045390",
+"chr9_93479394_93555145",
+"chr9_93443391_93478580",
+"chr12_110277872_110355989",
+"chr5_138505654_138578588",
+"chr14_103555078_103571667",
+"chr1_173818608_173832564",
+"chr2_199909685_199917329",
+"chr8_38161192_38200419",
+"chr14_102762098_102842127",
+"chr14_103651138_103659209",
+"chr1_51839557_51840042",
+"chr11_46455125_46458833",
+"chr2_27806852_27812367")
+
+clump_union_late_cd4_activation2 <- c("chr11_46513514_46516633",
+"chr11_46574378_46577301",
+"chr14_103572314_103580026",
+"chr3_52829680_52854555",
+"chr11_46419164_46422656",
+"chr12_118385640_118394696",
+"chr11_46539665_46549623",
+"chr5_138385021_138411450",
+"chr5_154267126_154279634",
+"chr11_46428338_46433483",
+"chr11_46435152_46437412",
+"chr3_49849607_49850058",
+"chr5_154261006_154261449",
+"chr11_46399922_46403048",
+"chr11_46406942_46417533",
+"chr17_18055388_18062637",
+"chr5_154226463_154237900",
+"chr3_49826744_49848468",
+"chr11_46471560_46486285",
+"chr20_46059114_46067543",
+"chr1_243389226_243392351",
+"chr11_46490479_46512079",
+"chr5_62197263_62202925")
+
+clump_union_late_cd4_activation3 <- c("chr2_207181680_207185557",
+"chr2_207218442_207261835",
+"chr5_61302458_61309191",
+"chr13_31275256_31275785",
+"chr1_51843127_51845502",
+"chr15_90735800_90888696",
+"chr5_154289840_154303036",
+"chr5_88246379_88256745",
+"chr5_62221766_62243169",
+"chr2_200370276_200393953",
+"chr15_84530565_84536387",
+"chr6_28396163_28401899",
+"chr6_25236231_25237674",
+"chr1_66617270_66628541",
+"chr17_17987580_17993504",
+"chr17_18085663_18111161",
+"chr14_103687819_103726312",
+"chr14_103731996_103743690",
+"chr2_232726821_232731946",
+"chr2_199935762_199964974",
+"chr22_41204309_41231646",
+"chr19_19311021_19339648",
+"chr6_27877340_27880978",
+"chr6_27804709_27840700",
+"chr6_27861293_27876636")
+
+clump_union_late_cd4_activation_all <- c(clump_union_late_cd4_activation1, clump_union_late_cd4_activation2, clump_union_late_cd4_activation3)
+
+length(clump_union_late_cd4_activation_all) 
+anno$cell_type <- NULL
+
+# FIGURE Pheatmap focused on late cd4 activation
+peaks_choice = union_reordered[rownames(union_reordered) %in% clump_union_late_cd4_activation_all,]
+pheatmap::pheatmap(peaks_choice, 
+         annotation_col =  anno, 
+         annotation_colors = annoCols, 
+         annotation_names_row = T,
+         annotation_row = rowannot,
+         border_color = F,
+         color = colorRampPalette(brewer.pal(n = 9, name = "Blues"))(length(breaksList)),
+         breaks = breaksList,
+         cluster_rows = F, cluster_cols = F,
+         filename=here("pics/pheatmap_cheers_cytoimmgen_enhancers_union_rowannot_cd4_late.pdf"), width=8.3, height=9.7)
+```
+
+```{r}
+save(cytoimmgen_celllist, cytoimmgen_H3K27ac_snps, cytoimmgen_H3K27ac_p, peaks, overlaps, anno, annoCols, rowannot, union_reordered, clump_union_late_cd4_activation_all, file = here("res/cheers_cytoimmgen_processed.RData"))
+```

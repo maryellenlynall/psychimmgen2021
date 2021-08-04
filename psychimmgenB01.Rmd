@@ -1,0 +1,44 @@
+---
+title: "Convert sumstats to format required by harmonization pipeline and call harmonization pipeline for crossdisorder risk"
+output: html_document
+---
+
+Snakemake pipeline. Liftover variants to desired genome assembly then harmonises them, including orienting variants to the reference strand.
+
+Following EBI method here: https://github.com/EBISPOT/gwas-sumstats-harmoniser
+
+```{bash}
+cd /lustre/scratch117/cellgen/team297/mel41/gwas-sumstats-harmoniser
+mkdir toharmonise
+
+# Copy over, converting white spaces to tabs as needs to be tsv
+tr ' ' \\t < /lustre/scratch117/cellgen/team297/mel41/summarystats/crossdisorder/pgc_cdg2_meta_no23andMe_oct2019_v2.txt.daner.clean.txt > /lustre/scratch117/cellgen/team297/mel41/gwas-sumstats-harmoniser/toharmonise/crossdisorder_lee2019_37.tsv
+
+cd toharmonise
+
+# Rename column headings as required by pipeline
+sed -i '1s/CHROM/chromosome/' crossdisorder_lee2019_37.tsv
+sed -i '1s/ID/variant_id/' crossdisorder_lee2019_37.tsv
+sed -i '1s/PVAL/p_value/' crossdisorder_lee2019_37.tsv
+sed -i '1s/p-value/p_value/' crossdisorder_lee2019_37.tsv
+sed -i '1s/POS/base_pair_location/' crossdisorder_lee2019_37.tsv
+sed -i '1s/BETA/beta/' crossdisorder_lee2019_37.tsv
+sed -i '1s/SE/standard_error/' crossdisorder_lee2019_37.tsv
+sed -i '1s/REF/other_allele/' crossdisorder_lee2019_37.tsv
+sed -i '1s/ALT/effect_allele/' crossdisorder_lee2019_37.tsv 
+sed -i '1s/FCON/effect_allele_frequency/' crossdisorder_lee2019_37.tsv
+
+# Add empty columns as required by pipeline
+sed '1s/$/\tci_lower\tci_upper\todds_ratio/; 2,$s/$/\tNA\tNA\tNA/' /lustre/scratch117/cellgen/team297/mel41/gwas-sumstats-harmoniser/toharmonise/crossdisorder_lee2019_37.tsv > tmp.tsv
+head tmp.tsv
+mv tmp.tsv /lustre/scratch117/cellgen/team297/mel41/gwas-sumstats-harmoniser/toharmonise/crossdisorder_lee2019_37.tsv
+```
+
+Execute
+```{bash}
+
+./wrapper_harmonization_to_hg38.sh 
+
+cp /lustre/scratch117/cellgen/team297/mel41/gwas-sumstats-harmoniser/toharmonise/crossdisorder_lee2019_37/harmonised.qc.tsv /nfs/team205/MRC_lab/mel41/summary_stats/hg38/crossdisorder_lee2019_hg38_harmonised.qc.tsv
+
+```

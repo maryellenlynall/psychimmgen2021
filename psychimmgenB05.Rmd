@@ -1,0 +1,42 @@
+---
+title: "apache spark filtered 1kg"
+output: html_document
+---
+
+Run distance-based clumping using apache spark finemapping pipeline with clumping distance 500kb
+https://github.com/opentargets/genetics-finemapping
+
+```{bash}
+
+cd genetics-finemapping
+
+source activate finemapping
+export PYSPARK_SUBMIT_ARGS="--driver-memory 80g pyspark-shell"
+export SPARK_HOME=/usr/local/spark # /home/ubuntu/software/spark-2.4.0-bin-hadoop2.7
+export PYTHONPATH=$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-0.10.7-src.zip/$PYTHONPATH
+
+python 1_scan_input_parquets_1kg.py
+
+python 2_make_manifest_1kg.py
+
+tmux
+source activate finemapping
+bash 4_run_commands_1kg.sh
+
+python 5_combine_results_1kg.py
+
+bash 6_copy_results_to_gcs_1kg.sh 
+
+exit
+
+```
+
+Wrangle to format usable by CHEERS 
+```{bash}
+
+cd /lustre/scratch117/cellgen/team297/mel41/sumstats_clump
+THREADS=1
+MEM=1000
+bsub -q normal -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e %Jerror -o %Jout "python3 toploci_spark2cheers_1kg.py > log_toploci_spark2cheers_1kg.txt"
+
+```

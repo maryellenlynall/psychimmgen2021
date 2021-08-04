@@ -1,0 +1,526 @@
+---
+title: "Munge sumstats for cross-disorder PGC 2019, then do normal and conditional s-LDSC models"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+Samples without 23andMe
+cases =  162,151
+controls = 276,846
+total = 438,997
+
+Lee 2019 Cell data
+https://pubmed.ncbi.nlm.nih.gov/31835028/
+
+ASSET meta-analysis
+
+```{bash}
+LDSCDIR=/Users/mary/non_dropbox/exps/ldsc
+cd $LDSCDIR
+FORLDSCDIR=~/Library/Mobile\ Documents/com~apple~CloudDocs/Documents/research/exps/forldsc
+
+# Make cases + controls total column
+awk 'BEGIN{OFS=FS} {print $3, $4, $5, $6, $8, $9, $11, $14, $15, $14+$15}' /Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/raw/summary_stats/crossdisorder/pgc_cdg2_meta_no23andMe_oct2019_v2.txt.daner.txt > /Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/raw/summary_stats/crossdisorder/crossdisorder_tidy.txt
+sed -i '' -e '1s/0/NCASPLUSNCON/' /Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/raw/summary_stats/crossdisorder/crossdisorder_tidy.txt
+
+# Munge sumstats
+${LDSCDIR}/munge_sumstats.py --sumstats /Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/raw/summary_stats/crossdisorder/crossdisorder_tidy.txt --signed-sumstats beta,0 --merge-alleles ${FORLDSCDIR}/w_hm3.snplist --out crossdisorder2019 --chunksize 500000  --p PVAL --snp ID --a1 ALT --a2 REF --N-col NCASPLUSNCON --N-cas-col NCAS --nstudy NGT --nstudy-min 8 --frq FCON --n-min 1
+
+```
+
+Run 'original' s-LDSC
+```{bash}
+
+# To run this, rename IDEASv1_active_original.ldcts as IDEASv1_active.ldcts as below, as the folder has to share name with the ldcts file, but we have several ldcts files we want to use (later) with the same IDEASv1_active folder.
+
+cd $LDSCDIR
+cts_name=IDEASv1_active
+cp $LDSCDIR/${cts_name}_original.ldcts $LDSCDIR/$cts_name.ldcts
+
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/crossdisorder2019.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out crossdisorder2019_cts_${cts_name} --ref-ld-chr-cts $LDSCDIR/$cts_name.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+
+```
+
+View results
+```{r}
+library(here)
+load(here("data/raw/roadmap/roadmap_sample_info_tidy.Rdata"))
+
+library(data.table)
+res_IDEASv1_active_xdiss <- read.table("/Users/mary/non_dropbox/exps/ldsc/crossdisorder2019_cts_IDEASv1_active.cell_type_results.txt", sep="\t", header=T)
+res_IDEASv1_active_xdiss$EID <- stringr::str_extract(res_IDEASv1_active_xdiss$Name, "[^_]+")
+
+# Merge with roadmap names by EID
+res_IDEASv1_active_xdiss <- dplyr::left_join(res_IDEASv1_active_xdiss, roadmap_names, by="EID")
+
+library(magrittr)
+# Drop cell lines and cultured cells
+res_IDEASv1_active_xdiss %<>% dplyr::filter(!type_mini=="IPSC / ESC / ESC-derived") 
+other_lines <- c("K562 Leukemia Cells", "HSMM cell derived Skeletal Muscle Myotubes Cells","HSMM Skeletal Muscle Myoblasts Cells","HepG2 Hepatocellular Carcinoma Cell Line","HeLa-S3 Cervical Carcinoma Cell Line","GM12878 Lymphoblastoid Cells","Dnd41 TCell Leukemia Cell Line","A549 EtOH 0.02pct Lung Carcinoma Cell Line","Mesenchymal Stem Cell Derived Adipocyte Cultured Cells","Adipose Derived Mesenchymal Stem Cell Cultured Cells","IMR90 fetal lung fibroblasts Cell Line","Mesenchymal Stem Cell Derived Chondrocyte Cultured Cells","Bone Marrow Derived Cultured Mesenchymal Stem Cells","Muscle Satellite Cultured Cells","Primary hematopoietic stem cells short term culture","Ganglion Eminence derived primary cultured neurospheres","Cortex derived primary cultured neurospheres") 
+res_IDEASv1_active_xdiss %<>% dplyr::filter(!name %in% other_lines)
+
+dim(res_IDEASv1_active_xdiss) # 88 tissues
+
+# FDR
+res_IDEASv1_active_xdiss$FDR <- p.adjust(res_IDEASv1_active_xdiss$Coefficient_P_value)
+
+# AView
+res_IDEASv1_active_xdiss %>% dplyr::arrange(Coefficient_P_value) %>% dplyr::filter(FDR<0.05)
+
+# NB For ROADMAP tissues, metadata spreadsheet is here https://docs.google.com/spreadsheets/u/0/d/1yikGx4MsO9Ei36b64yOy9Vb6oPC5IBGlFbYEt-N6gOM/edit?usp=sharing 
+# GEO listings are here: https://www.ncbi.nlm.nih.gov/geo/roadmap/epigenomics/
+
+# Roadmap tissues passing FDR.
+res_IDEASv1_active_xdiss$sig <- ifelse(res_IDEASv1_active_xdiss$FDR<0.05, "sig(FDR<0.05)",ifelse(res_IDEASv1_active_xdiss$Coefficient_P_value<0.05, "P(raw)<0.05", "non_sig"))
+
+# Group by tissue type, so order the tissue names by type
+res_IDEASv1_active_xdiss <- res_IDEASv1_active_xdiss %>% dplyr::arrange(type_mini, Coefficient_P_value) 
+res_IDEASv1_active_xdiss$name <- factor(res_IDEASv1_active_xdiss$name, levels=unique(res_IDEASv1_active_xdiss$name), ordered=T)
+
+# FIGURE
+ggplot(res_IDEASv1_active_xdiss, aes(x=-log10(Coefficient_P_value), y=name, fill=sig)) + geom_bar(stat="identity") + expand_limits(y=0) + theme_bw() + xlab("-log10(p)") + ggforce::facet_col(~type_mini, scales = 'free_y', space = 'free') + ylab("") + scale_fill_manual(values=c("dark grey","#1B9E77", "#7570B3")) + theme(panel.grid.minor.x = element_blank()) 
+ggsave(here("pics/IDEASv1_roadmap_pvals_xdiss_facet.pdf"), width = 6.7, height=14)
+
+IDEAS_blood <- grep("BLD",res_IDEASv1_active_xdiss$Name %>% sort, value=T)
+ggplot(res_IDEASv1_active_xdiss %>% dplyr::filter(Name %in% IDEAS_blood), aes(x=-log10(Coefficient_P_value), y=Name)) + geom_bar(stat="identity") + expand_limits(y=0) + theme_bw() + geom_vline(xintercept = -log10(0.05), color="dark red") + xlab("-log10(p)")
+library(here)
+ggsave(here("pics/IDEASv1_roadmap_blood_pvals_xdiss.pdf"), width = 6, height=8)
+
+```
+
+Conditional s-LDSC where also add the top ranked neural enrichment to the baseline model to see effect on immune enrichment
+```{bash}
+deactivate
+conda activate ldsc
+
+# Make new ldcts adding the comma then male fetal brain to each tissue type
+cd $LDSCDIR
+cts_name=IDEASv1_active
+awk '{print $0",IDEASv1_ldscores/IDEASv1_active_E081."}' ${cts_name}_original.ldcts > ${cts_name}_conditional.ldcts
+
+cp $LDSCDIR/${cts_name}_conditional.ldcts $LDSCDIR/$cts_name.ldcts
+
+cat $LDSCDIR/$cts_name.ldcts
+
+# Run s-LDSC
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/crossdisorder2019.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out crossdisorder2019_cts_${cts_name}_conditional --ref-ld-chr-cts $LDSCDIR/$cts_name.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+
+```
+
+```{r}
+res_IDEASv1_active_xdiss_conditional <- read.table("/Users/mary/non_dropbox/exps/ldsc/crossdisorder2019_cts_IDEASv1_active_conditional.cell_type_results.txt", sep="\t", header=T)
+res_IDEASv1_active_xdiss_conditional$EID <- stringr::str_extract(res_IDEASv1_active_xdiss_conditional$Name, "[^_]+")
+
+res_IDEASv1_active_xdiss_conditional <- dplyr::left_join(res_IDEASv1_active_xdiss_conditional, roadmap_names, by="EID")
+
+# Drop cell lines
+library(magrittr)
+res_IDEASv1_active_xdiss_conditional %<>% dplyr::filter(!type_mini=="IPSC / ESC / ESC-derived") 
+res_IDEASv1_active_xdiss_conditional %<>% dplyr::filter(!name %in% other_lines)
+
+# Drop fetal brain
+tmp <- res_IDEASv1_active_xdiss_conditional %>% dplyr::filter(name %in% "Fetal Brain Male")
+res_IDEASv1_active_xdiss_conditional %<>% dplyr::filter(!name %in% "Fetal Brain Male")
+dim(res_IDEASv1_active_xdiss_conditional) # Now 87
+
+# FDR
+res_IDEASv1_active_xdiss_conditional$FDR <- p.adjust(res_IDEASv1_active_xdiss_conditional$Coefficient_P_value)
+
+# Put back fetal brain male just for plotting layout. Meaningless regression as has fetal male brain in model twice.
+tmp$FDR <- 1
+tmp$Coefficient_P_value <- 1
+res_IDEASv1_active_xdiss_conditional <- bind_rows(res_IDEASv1_active_xdiss_conditional, tmp)
+
+# Those roadmap tissues passing FDR. 
+res_IDEASv1_active_xdiss_conditional %>% dplyr::filter(FDR<0.05) 
+res_IDEASv1_active_xdiss_conditional$sig <- ifelse(res_IDEASv1_active_xdiss_conditional$FDR<0.05, "sig(FDR<0.05)",ifelse(res_IDEASv1_active_xdiss_conditional$Coefficient_P_value<0.05, "P(raw)<0.05", "non_sig"))
+
+# Group by tissue type
+res_IDEASv1_active_xdiss_conditional <- res_IDEASv1_active_xdiss_conditional %>% dplyr::arrange(type_mini, Coefficient_P_value) 
+
+# NOTE LEVELS TAKEN FROM ORIGINAL ORDERING *NOT* conditional ordering for plotting purposes
+res_IDEASv1_active_xdiss_conditional$name <- factor(res_IDEASv1_active_xdiss_conditional$name, levels=unique(res_IDEASv1_active_xdiss$name), ordered=T)
+
+# SUPPLEMENTARY FIGURES
+ggplot(res_IDEASv1_active_xdiss_conditional, aes(x=-log10(Coefficient_P_value), y=name, fill=sig)) + geom_bar(stat="identity") + expand_limits(y=0) + theme_bw() + xlab("-log10(p)") + ggforce::facet_col(~type_mini, scales = 'free_y', space = 'free') + ylab("") + expand_limits(x=24.2) + scale_fill_manual(values=c("dark grey","#1B9E77", "#7570B3")) + theme(panel.grid.minor.x = element_blank()) # + geom_vline(xintercept = -log10(0.05), color="dark red") 
+ggsave(here("pics/IDEASv1_roadmap_pvals_xdiss_conditional_facet.pdf"), width = 6.7, height=14)
+
+a <- ggplot(res_IDEASv1_active_xdiss %>% dplyr::filter(type_mini %in% c("Blood/immune","Brain")), aes(x=-log10(Coefficient_P_value), y=name, fill=sig)) + geom_bar(stat="identity") + expand_limits(y=0) + theme_bw() + geom_vline(xintercept = -log10(0.05), color="dark red") + xlab("-log10(p)") + ggforce::facet_col(~type_mini, scales = 'free_y', space = 'free') + ylab("") + expand_limits(x=4) + guides(fill=FALSE) + ggtitle("Original sLDSC\n(total 91 comparisons)") + expand_limits(x=24.2)
+b <- ggplot(res_IDEASv1_active_xdiss_conditional %>% dplyr::filter(type_mini %in% c("Blood/immune","Brain")), aes(x=-log10(Coefficient_P_value), y=name, fill=sig)) + geom_bar(stat="identity") + expand_limits(y=0) + theme_bw() + geom_vline(xintercept = -log10(0.05), color="dark red") + xlab("-log10(p)") + ggforce::facet_col(~type_mini, scales = 'free_y', space = 'free') + ylab("") + guides(fill=FALSE) + ggtitle("Conditional sLDSC\n(total 90 comparisons)") + expand_limits(x=24.2)
+
+g <- cowplot::plot_grid(a,b,ncol=2, rel_heights = c(1,1), align = "hv")
+cowplot::save_plot(filename = "IDEASv1_roadmap_pvals_xdiss_immune_original_vs_conditional_fetal_male_only.pdf", g, path=here("pics/"), base_width=12, base_height=10)
+
+a <- ggplot(res_IDEASv1_active_xdiss %>% dplyr::filter(type_mini %in% c("Brain")), aes(x=-log10(Coefficient_P_value), y=name, fill=sig)) + geom_bar(stat="identity") + expand_limits(y=0) + theme_bw() + xlab("-log10(p)") + ggforce::facet_col(~type_mini, scales = 'free_y', space = 'free') + ylab("") + guides(fill=FALSE) + ggtitle(paste0("Original sLDSC\n(total ",nrow(res_IDEASv1_active_xdiss)," comparisons)")) + expand_limits(x=24.2) + scale_fill_manual(limits=c("non_sig","P(raw)<0.05","sig(FDR<0.05)"), values=c("dark grey","#1B9E77", "#7570B3")) + theme(panel.grid.minor.x = element_blank()) # + geom_vline(xintercept = -log10(0.05), color="dark red") 
+b <- ggplot(res_IDEASv1_active_xdiss_conditional %>% dplyr::filter(type_mini %in% c("Brain")), aes(x=-log10(Coefficient_P_value), y=name, fill=sig)) + geom_bar(stat="identity") + expand_limits(y=0) + theme_bw() + xlab("-log10(p)") + ggforce::facet_col(~type_mini, scales = 'free_y', space = 'free') + ylab("") + guides(fill=FALSE) + ggtitle(paste0("Male fetal brain conditional sLDSC\n(total ",nrow(res_IDEASv1_active_xdiss)-1," comparisons)")) + expand_limits(x=24.2) + scale_fill_manual(limits=c("non_sig","P(raw)<0.05","sig(FDR<0.05)"), values=c("dark grey","#1B9E77", "#7570B3")) + theme(panel.grid.minor.x = element_blank()) 
+
+g <- cowplot::plot_grid(a,b,ncol=2, rel_heights = c(1,1), align = "hv")
+cowplot::save_plot(filename = "IDEASv1_roadmap_pvals_xdiss_brain_original_vs_conditional_fetal_male_only.pdf", g, path=here("pics/"), base_width=8, base_height=3.2)
+
+```
+
+Conditional s-LDSC including all brain regions passing significance in original model as additional annotations in all other models:
+
+Fetal Brain Male
+Fetal Brain Female
+Brain Germinal Matrix
+Brain_Dorsolateral_Prefrontal_Cortex
+Brain Angular Gyrus
+Brain Inferior Temporal Lobe
+Brain Anterior Caudate
+Brain Cingulate Gyrus
+Brain Hippocampus Middle
+
+i.e.
+E067_BRN.ANG.GYR	IDEASv1_ldscores/IDEASv1_active_E067.
+E068_BRN.ANT.CAUD	IDEASv1_ldscores/IDEASv1_active_E068.
+E069_BRN.CING.GYR	IDEASv1_ldscores/IDEASv1_active_E069.
+E070_BRN.GRM.MTRX	IDEASv1_ldscores/IDEASv1_active_E070.
+E071_BRN.HIPP.MID	IDEASv1_ldscores/IDEASv1_active_E071.
+E072_BRN.INF.TMP	IDEASv1_ldscores/IDEASv1_active_E072.
+E073_BRN.DL.PRFRNTL.CRTX	IDEASv1_ldscores/IDEASv1_active_E073.
+E074_BRN.SUB.NIG	IDEASv1_ldscores/IDEASv1_active_E074.
+E081_BRN.FET.M	IDEASv1_ldscores/IDEASv1_active_E081.
+E082_BRN.FET.F	IDEASv1_ldscores/IDEASv1_active_E082.
+
+```{bash}
+deactivate
+conda activate ldsc
+
+cd $LDSCDIR
+cts_name=IDEASv1_active
+
+# Make new ldcts
+awk '{print $0",IDEASv1_ldscores/IDEASv1_active_E067.,IDEASv1_ldscores/IDEASv1_active_E068.,IDEASv1_ldscores/IDEASv1_active_E069.,IDEASv1_ldscores/IDEASv1_active_E070.,IDEASv1_ldscores/IDEASv1_active_E071.,IDEASv1_ldscores/IDEASv1_active_E072.,IDEASv1_ldscores/IDEASv1_active_E073.,IDEASv1_ldscores/IDEASv1_active_E074.,IDEASv1_ldscores/IDEASv1_active_E081.,IDEASv1_ldscores/IDEASv1_active_E082."}' ${cts_name}_original.ldcts > ${cts_name}_conditionalALLSIGBRAIN.ldcts
+
+# Delete lines specifying models for the 10 cell types for which this model will be meaningless 
+sed -i '' '/E067_BRN.ANG.GYR/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+sed -i '' '/E068_BRN.ANT.CAUD/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+sed -i '' '/E069_BRN.CING.GYR/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+sed -i '' '/E070_BRN.GRM.MTRX/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+sed -i '' '/E071_BRN.HIPP.MID/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+sed -i '' '/E072_BRN.INF.TMP/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+sed -i '' '/E073_BRN.DL.PRFRNTL.CRTX/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+sed -i '' '/E074_BRN.SUB.NIG/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+sed -i '' '/E081_BRN.FET.M/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+sed -i '' '/E082_BRN.FET.F/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+
+# Delete cell lines
+sed -i '' '/_ESC/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+sed -i '' '/_IPSC/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+sed -i '' '/_ESDR/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+sed -i '' '/E053_BRN.CRTX.DR.NRSPHR/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+sed -i '' '/E054_BRN.GANGEM.DR.NRSPHR/d' ./${cts_name}_conditionalALLSIGBRAIN.ldcts
+
+# Move to locations for running s-LDSC
+cp $LDSCDIR/${cts_name}_conditionalALLSIGBRAIN.ldcts $LDSCDIR/$cts_name.ldcts
+
+# s-LDSC NB. out file has 'conditionalALLSIGBRAIN' appended to distinguish
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/crossdisorder2019.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out crossdisorder2019_cts_${cts_name}_conditionalALLSIGBRAIN --ref-ld-chr-cts $LDSCDIR/$cts_name.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+
+```
+
+View results 
+```{r}
+res_IDEASv1_active_xdiss_conditional <- read.table("/Users/mary/non_dropbox/exps/ldsc/crossdisorder2019_cts_IDEASv1_active_conditionalALLSIGBRAIN.cell_type_results.txt", sep="\t", header=T)
+res_IDEASv1_active_xdiss_conditional$EID <- stringr::str_extract(res_IDEASv1_active_xdiss_conditional$Name, "[^_]+")
+
+# Merge with roadmap names by EID
+res_IDEASv1_active_xdiss_conditional <- dplyr::left_join(res_IDEASv1_active_xdiss_conditional, roadmap_names, by="EID")
+
+library(tidyverse)
+res_IDEASv1_active_xdiss_conditional %>% dplyr::arrange(Coefficient_P_value) %>% head(20)
+
+# Drop cell lines
+res_IDEASv1_active_xdiss_conditional %<>% dplyr::filter(!name %in% other_lines)
+
+# Generate blank lines for brain regions used for conditioning just for plotting layout. 
+tmp <- res_IDEASv1_active_xdiss[res_IDEASv1_active_xdiss$EID %in% c("E067","E068","E069","E070","E071","E072","E073","E074","E081","E082"),]
+tmp$FDR <- 1
+tmp$Coefficient_P_value <- 1
+tmp$sig <- NULL
+
+dim(res_IDEASv1_active_xdiss_conditional) # 78
+
+# FDR 
+res_IDEASv1_active_xdiss_conditional$FDR <- p.adjust(res_IDEASv1_active_xdiss_conditional$Coefficient_P_value)
+
+# Add back the blank brain regions for plotting
+res_IDEASv1_active_xdiss_conditional <- bind_rows(res_IDEASv1_active_xdiss_conditional, tmp)
+
+# Those roadmap tissues passing FDR. 
+res_IDEASv1_active_xdiss_conditional %>% dplyr::filter(FDR<0.05) 
+res_IDEASv1_active_xdiss_conditional$sig <- ifelse(res_IDEASv1_active_xdiss_conditional$FDR<0.05, "sig(FDR<0.05)",ifelse(res_IDEASv1_active_xdiss_conditional$Coefficient_P_value<0.05, "P(raw)<0.05", "non_sig"))
+
+# Group by tissue type
+res_IDEASv1_active_xdiss_conditional <- res_IDEASv1_active_xdiss_conditional %>% dplyr::arrange(type_mini, Coefficient_P_value) 
+
+# NOTE LEVELS TAKEN FROM ORIGINAL ORDERING *NOT* conditional ordering for plotting
+res_IDEASv1_active_xdiss_conditional$name <- factor(res_IDEASv1_active_xdiss_conditional$name, levels=unique(res_IDEASv1_active_xdiss$name), ordered=T)
+
+# APOLLO SUPPLEMENTARY FIGURE
+ggplot(res_IDEASv1_active_xdiss_conditional, aes(x=-log10(Coefficient_P_value), y=name, fill=sig)) + geom_bar(stat="identity") + expand_limits(y=0) + theme_bw() + xlab("-log10(p)") + ggforce::facet_col(~type_mini, scales = 'free_y', space = 'free') + ylab("")  + scale_fill_manual(limits=c("non_sig","P(raw)<0.05","sig(FDR<0.05)"), values=c("dark grey","#1B9E77", "#7570B3")) + theme(panel.grid.minor.x = element_blank()) + expand_limits(x=24.2) 
+ggsave(here("pics/IDEASv1_roadmap_pvals_xdiss_conditionalALLSIGBRAIN_facet.pdf"), width = 6.7, height=14)
+
+# Direct comparison with wider axes
+# Consistent x limits for immune
+# a is original, b is conditional
+a <- ggplot(res_IDEASv1_active_xdiss %>% dplyr::filter(type_mini=="Blood/immune"), aes(x=-log10(Coefficient_P_value), y=name, fill=sig)) + geom_bar(stat="identity") + expand_limits(y=0) + theme_bw() + xlab("-log10(p)") + ggforce::facet_col(~type_mini, scales = 'free_y', space = 'free') + ylab("")  + guides(fill=FALSE)+ ggtitle(paste0("Original sLDSC\n(total ",nrow(res_IDEASv1_active_xdiss)," comparisons)")) + expand_limits(x=4) + scale_fill_manual(limits=c("non_sig","P(raw)<0.05","sig(FDR<0.05)"), values=c("dark grey","#1B9E77", "#7570B3")) + theme(panel.grid.minor.x = element_blank()) # + geom_vline(xintercept = -log10(0.05), color="dark red")
+b <- ggplot(res_IDEASv1_active_xdiss_conditional %>% dplyr::filter(type_mini=="Blood/immune"), aes(x=-log10(Coefficient_P_value), y=name, fill=sig)) + geom_bar(stat="identity") + theme_bw() + xlab("-log10(p)") + ggforce::facet_col(~type_mini, scales = 'free_y', space = 'free') + ylab("")  + guides(fill=FALSE) + ggtitle(paste0("Original sLDSC\n(total ",nrow(res_IDEASv1_active_xdiss)," comparisons)")) + expand_limits(x=4) + scale_fill_manual(limits=c("non_sig","P(raw)<0.05","sig(FDR<0.05)"), values=c("dark grey","#1B9E77", "#7570B3")) + theme(panel.grid.minor.x = element_blank()) # + geom_vline(xintercept = -log10(0.05), color="dark red")
+
+g <- cowplot::plot_grid(a,b,ncol=2, rel_heights = c(1,1), align = "hv")
+cowplot::save_plot(filename = "IDEASv1_roadmap_pvals_xdiss_immune_original_vs_conditional.pdf", g, path=here("pics/"), base_width=12, base_height=6)
+
+```
+
+Make mirror bar chart (Figure 1B)
+```{r}
+res_IDEASv1_active_xdiss$version <- "Original"
+res_IDEASv1_active_xdiss_conditional$version <- "Conditional"
+
+# Make original p values opposite
+res_IDEASv1_active_xdiss$x <- log10(res_IDEASv1_active_xdiss$Coefficient_P_value)
+res_IDEASv1_active_xdiss_conditional$x <- -log10(res_IDEASv1_active_xdiss_conditional$Coefficient_P_value)
+
+tmp <- bind_rows(res_IDEASv1_active_xdiss, res_IDEASv1_active_xdiss_conditional) %>% dplyr::filter(type_mini=="Blood/immune")
+
+ggplot(tmp, aes(x=x, y=name, fill=sig)) + geom_bar(stat="identity", position="identity") + theme_bw() + xlab("-log10(p)") + ggforce::facet_col(~type_mini, scales = 'free_y', space = 'free') + ylab("")  + guides(fill=FALSE) + ggtitle("") + expand_limits(x=c(-4.1,4.1)) + scale_fill_manual(limits=c("non_sig","P(raw)<0.05","sig(FDR<0.05)"), values=c("dark grey","#1B9E77", "#7570B3")) + theme(panel.grid.minor.x = element_blank()) + geom_vline(xintercept = 0)
+ggsave(filename = here("pics/IDEASv1_roadmap_pvals_xdiss_immune_original_vs_conditional_mirror.pdf"),width=6.5,height=5.5)
+
+```
+
+LDSC using fetal female (E082) rather than fetal male brain for the conditional analysis to ensure results not driven by sex differences.
+```{bash}
+deactivate
+conda activate ldsc
+
+# Make ldcts
+LDSCDIR=/Users/mary/non_dropbox/exps/ldsc
+cd $LDSCDIR
+cts_name=IDEASv1_active
+awk '{print $0",IDEASv1_ldscores/IDEASv1_active_E082."}' ${cts_name}_original.ldcts > ${cts_name}_conditional_femalebrain.ldcts
+# NOTE - manually delete the 2nd E082 term from the E082 line itself otherwise get singular matrix - won't use this model output.
+
+cp $LDSCDIR/${cts_name}_conditional_femalebrain.ldcts $LDSCDIR/$cts_name.ldcts
+
+# s-LDSC. NB. out file has 'conditional_femalebrain' appended to distinguish
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/crossdisorder2019.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out crossdisorder2019_cts_${cts_name}_conditional_femalebrain --ref-ld-chr-cts $LDSCDIR/$cts_name.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+
+```
+
+View results
+```{r}
+res_IDEASv1_active_xdiss_conditional <- read.table("/Users/mary/non_dropbox/exps/ldsc/crossdisorder2019_cts_IDEASv1_active_conditional_femalebrain.cell_type_results.txt", sep="\t", header=T)
+res_IDEASv1_active_xdiss_conditional$EID <- stringr::str_extract(res_IDEASv1_active_xdiss_conditional$Name, "[^_]+")
+
+
+res_IDEASv1_active_xdiss_conditional <- dplyr::left_join(res_IDEASv1_active_xdiss_conditional, roadmap_names, by="EID")
+res_IDEASv1_active_xdiss_conditional %<>% dplyr::filter(!type_mini=="IPSC / ESC / ESC-derived") 
+res_IDEASv1_active_xdiss_conditional %<>% dplyr::filter(!name %in% other_lines)
+
+# Extract then drop fetal brain female model (meaningless)
+tmp <- res_IDEASv1_active_xdiss_conditional %>% dplyr::filter(name %in% "Fetal Brain Female")
+res_IDEASv1_active_xdiss_conditional %<>% dplyr::filter(!name %in% "Fetal Brain Female")
+dim(res_IDEASv1_active_xdiss_conditional) # Now 87
+
+# FDR
+res_IDEASv1_active_xdiss_conditional$FDR <- p.adjust(res_IDEASv1_active_xdiss_conditional$Coefficient_P_value)
+
+# Put back fetal brain female just for plotting layout. Meaningless regression.
+tmp$FDR <- 1
+tmp$Coefficient_P_value <- 1
+res_IDEASv1_active_xdiss_conditional <- bind_rows(res_IDEASv1_active_xdiss_conditional, tmp)
+res_IDEASv1_active_xdiss_conditional %>% dplyr::filter(FDR<0.05) 
+res_IDEASv1_active_xdiss_conditional$sig <- ifelse(res_IDEASv1_active_xdiss_conditional$FDR<0.05, "sig(FDR<0.05)",ifelse(res_IDEASv1_active_xdiss_conditional$Coefficient_P_value<0.05, "P(raw)<0.05", "non_sig"))
+res_IDEASv1_active_xdiss_conditional <- res_IDEASv1_active_xdiss_conditional %>% dplyr::arrange(type_mini, Coefficient_P_value) 
+res_IDEASv1_active_xdiss_conditional$name <- factor(res_IDEASv1_active_xdiss_conditional$name, levels=unique(res_IDEASv1_active_xdiss$name), ordered=T)
+
+# FIGURE FEMALE FETAL CONDITIONAL ANALYSIS
+ggplot(res_IDEASv1_active_xdiss_conditional, aes(x=-log10(Coefficient_P_value), y=name, fill=sig)) + geom_bar(stat="identity") + expand_limits(y=0) + theme_bw() + xlab("-log10(p)") + ggforce::facet_col(~type_mini, scales = 'free_y', space = 'free') + ylab("") + expand_limits(x=24.2) + scale_fill_manual(values=c("dark grey","#1B9E77", "#7570B3")) + theme(panel.grid.minor.x = element_blank()) # + geom_vline(xintercept = -log10(0.05), color="dark red") 
+ggsave(here("pics/IDEASv1_roadmap_pvals_xdiss_conditional_facet_female.pdf"), width = 6.7, height=14)
+
+# Show brain regions
+a <- ggplot(res_IDEASv1_active_xdiss %>% dplyr::filter(type_mini %in% c("Brain")), aes(x=-log10(Coefficient_P_value), y=name, fill=sig)) + geom_bar(stat="identity") + expand_limits(y=0) + theme_bw() + xlab("-log10(p)") + ggforce::facet_col(~type_mini, scales = 'free_y', space = 'free') + ylab("") + guides(fill=FALSE) + ggtitle(paste0("Original sLDSC\n(total ",nrow(res_IDEASv1_active_xdiss)," comparisons)")) + expand_limits(x=24.2) + scale_fill_manual(limits=c("non_sig","P(raw)<0.05","sig(FDR<0.05)"), values=c("dark grey","#1B9E77", "#7570B3")) + theme(panel.grid.minor.x = element_blank()) 
+b <- ggplot(res_IDEASv1_active_xdiss_conditional %>% dplyr::filter(type_mini %in% c("Brain")), aes(x=-log10(Coefficient_P_value), y=name, fill=sig)) + geom_bar(stat="identity") + expand_limits(y=0) + theme_bw() + xlab("-log10(p)") + ggforce::facet_col(~type_mini, scales = 'free_y', space = 'free') + ylab("") + guides(fill=FALSE) + ggtitle(paste0("Female fetal brain conditional sLDSC\n(total ",nrow(res_IDEASv1_active_xdiss)-1," comparisons)")) + expand_limits(x=24.2) + scale_fill_manual(limits=c("non_sig","P(raw)<0.05","sig(FDR<0.05)"), values=c("dark grey","#1B9E77", "#7570B3")) + theme(panel.grid.minor.x = element_blank()) 
+
+g <- cowplot::plot_grid(a,b,ncol=2, rel_heights = c(1,1), align = "hv")
+cowplot::save_plot(filename = "IDEASv1_roadmap_pvals_xdiss_brain_original_vs_conditional_fetal_female_only.pdf", g, path=here("pics/"), base_width=8, base_height=3.2)
+
+```
+
+Statistical comparisons of original vs. conditional analyses
+```{r}
+# Two-sample one-sided right-tailed z-test function
+ztest <- function(name, beta1, beta2, se1, se2){
+  # Set beta1 as the original and beta2 as conditional regression coefficient 
+  print(name)
+  z <- (beta1-beta2)/sqrt(se1^2 + se2^2)
+  print(sprintf('z=%f',z))
+  p <- pnorm(z, mean = 0, sd = 1, lower.tail = FALSE)
+  print(sprintf('p=%f',p))
+}
+
+
+# Sigificant brain regions
+brain_regions <- c("E067_BRN.ANG.GYR","E068_BRN.ANT.CAUD","E069_BRN.CING.GYR","E070_BRN.GRM.MTRX","E071_BRN.HIPP.MID","E072_BRN.INF.TMP","E073_BRN.DL.PRFRNTL.CRTX","E074_BRN.SUB.NIG","E081_BRN.FET.M","E082_BRN.FET.F")
+
+# Significant immune regions
+immune_regions <- c("E047_BLD.CD8.NPC","E038_BLD.CD4.NPC","E048_BLD.CD8.MPC","E042_BLD.CD4.CD25M.IL17P.PL.TPC","E041_BLD.CD4.CD25M.IL17M.PL.TPC","E040_BLD.CD4.CD25M.CD45RO.MPC","E044_BLD.CD4.CD25.CD127M.TREGPC","E045_BLD.CD4.CD25I.CD127.TMEMPC","E043_BLD.CD4.CD25M.TPC","E039_BLD.CD4.CD25M.CD45RA.NPC","E037_BLD.CD4.MPC","E033_BLD.CD3.CPC")
+
+```
+
+Male fetal brain conditional analysis - are the other brain regions significantly less enriched?
+```{r}
+# Load relevant conditional analysis
+res_IDEASv1_active_xdiss_conditional <- read.table("/Users/mary/non_dropbox/exps/ldsc/crossdisorder2019_cts_IDEASv1_active_conditional.cell_type_results.txt", sep="\t", header=T)
+
+# See the stats
+for (i in setdiff(brain_regions,"E081_BRN.FET.M")){
+  # Get pretty name
+  ztest(name=roadmap_names[paste(roadmap_names$EID,roadmap_names$mnemonic,sep="_")==i,"name"],
+  beta1=res_IDEASv1_active_xdiss[res_IDEASv1_active_xdiss$Name==i,"Coefficient"],
+      beta2=res_IDEASv1_active_xdiss_conditional[res_IDEASv1_active_xdiss_conditional$Name==i,"Coefficient"],
+      se1=res_IDEASv1_active_xdiss[res_IDEASv1_active_xdiss$Name==i,"Coefficient_std_error"],
+      se2=res_IDEASv1_active_xdiss_conditional[res_IDEASv1_active_xdiss_conditional$Name==i,"Coefficient_std_error"] 
+      )
+}
+
+# [1] "Brain Angular Gyrus"
+# [1] "z=1.802204"
+# [1] "p=0.035757"
+# [1] "Brain Anterior Caudate"
+# [1] "z=1.738503"
+# [1] "p=0.041061"
+# [1] "Brain Cingulate Gyrus"
+# [1] "z=1.749799"
+# [1] "p=0.040077"
+# [1] "Brain Germinal Matrix"
+# [1] "z=2.611604"
+# [1] "p=0.004506"
+# [1] "Brain Hippocampus Middle"
+# [1] "z=1.502248"
+# [1] "p=0.066517"
+# [1] "Brain Inferior Temporal Lobe"
+# [1] "z=1.802898"
+# [1] "p=0.035702"
+# [1] "Brain_Dorsolateral_Prefrontal_Cortex"
+# [1] "z=1.941161"
+# [1] "p=0.026119"
+# [1] "Brain Substantia Nigra"
+# [1] "z=1.338554"
+# [1] "p=0.090358"
+# [1] "Fetal Brain Female"
+# [1] "z=1.731109"
+# [1] "p=0.041716"
+
+```
+
+
+Female-brain-conditioned analysis
+```{r}
+# Load relevant conditional analysis
+res_IDEASv1_active_xdiss_conditional <- read.table("/Users/mary/non_dropbox/exps/ldsc/crossdisorder2019_cts_IDEASv1_active_conditional_femalebrain.cell_type_results.txt", sep="\t", header=T)
+
+# See the stats
+for (i in setdiff(brain_regions,"E082_BRN.FET.F")){
+  # Get pretty name
+  ztest(name=roadmap_names[paste(roadmap_names$EID,roadmap_names$mnemonic,sep="_")==i,"name"],
+  beta1=res_IDEASv1_active_xdiss[res_IDEASv1_active_xdiss$Name==i,"Coefficient"],
+      beta2=res_IDEASv1_active_xdiss_conditional[res_IDEASv1_active_xdiss_conditional$Name==i,"Coefficient"],
+      se1=res_IDEASv1_active_xdiss[res_IDEASv1_active_xdiss$Name==i,"Coefficient_std_error"],
+      se2=res_IDEASv1_active_xdiss_conditional[res_IDEASv1_active_xdiss_conditional$Name==i,"Coefficient_std_error"] 
+      )
+}
+
+# [1] "Brain Angular Gyrus"
+# [1] "z=2.191245"
+# [1] "p=0.014217"
+# [1] "Brain Anterior Caudate"
+# [1] "z=2.195838"
+# [1] "p=0.014052"
+# [1] "Brain Cingulate Gyrus"
+# [1] "z=2.192980"
+# [1] "p=0.014154"
+# [1] "Brain Germinal Matrix"
+# [1] "z=2.918888"
+# [1] "p=0.001756"
+# [1] "Brain Hippocampus Middle"
+# [1] "z=1.986241"
+# [1] "p=0.023503"
+# [1] "Brain Inferior Temporal Lobe"
+# [1] "z=2.194552"
+# [1] "p=0.014098"
+# [1] "Brain_Dorsolateral_Prefrontal_Cortex"
+# [1] "z=2.311813"
+# [1] "p=0.010394"
+# [1] "Brain Substantia Nigra"
+# [1] "z=1.774647"
+# [1] "p=0.037978"
+# [1] "Fetal Brain Male"
+# [1] "z=2.773750"
+# [1] "p=0.002771"
+
+```
+
+Now the all-brain-regions conditioned analysis
+```{r}
+# Load relevant conditional analysis
+res_IDEASv1_active_xdiss_conditional <- read.table("/Users/mary/non_dropbox/exps/ldsc/crossdisorder2019_cts_IDEASv1_active_conditionalALLSIGBRAIN.cell_type_results.txt", sep="\t", header=T)
+
+# See the stats
+for (i in immune_regions){
+  # Get pretty name
+  ztest(name=roadmap_names[paste(roadmap_names$EID,roadmap_names$mnemonic,sep="_")==i,"name"],
+  beta1=res_IDEASv1_active_xdiss[res_IDEASv1_active_xdiss$Name==i,"Coefficient"],
+      beta2=res_IDEASv1_active_xdiss_conditional[res_IDEASv1_active_xdiss_conditional$Name==i,"Coefficient"],
+      se1=res_IDEASv1_active_xdiss[res_IDEASv1_active_xdiss$Name==i,"Coefficient_std_error"],
+      se2=res_IDEASv1_active_xdiss_conditional[res_IDEASv1_active_xdiss_conditional$Name==i,"Coefficient_std_error"] 
+      )
+}
+
+# [1] "Primary T CD8+ naive cells from peripheral blood"
+# [1] "z=0.335380"
+# [1] "p=0.368669"
+# [1] "Primary T helper naive cells from peripheral blood 2"
+# [1] "z=0.203120"
+# [1] "p=0.419520"
+# [1] "Primary T CD8+ memory cells from peripheral blood"
+# [1] "z=0.212287"
+# [1] "p=0.415942"
+# [1] "Primary T helper 17 cells PMA-I stimulated"
+# [1] "z=0.194131"
+# [1] "p=0.423036"
+# [1] "Primary T helper cells PMA-I stimulated"
+# [1] "z=0.191257"
+# [1] "p=0.424162"
+# [1] "Primary T helper memory cells from peripheral blood 1"
+# [1] "z=0.167997"
+# [1] "p=0.433293"
+# [1] "Primary T regulatory cells from peripheral blood"
+# [1] "z=0.203854"
+# [1] "p=0.419234"
+# [1] "Primary T cells effector/memory enriched from peripheral blood"
+# [1] "z=0.256101"
+# [1] "p=0.398936"
+# [1] "Primary T helper cells from peripheral blood"
+# [1] "z=0.195367"
+# [1] "p=0.422553"
+# [1] "Primary T helper naive cells from peripheral blood 1"
+# [1] "z=0.281714"
+# [1] "p=0.389081"
+# [1] "Primary T helper memory cells from peripheral blood 2"
+# [1] "z=0.180971"
+# [1] "p=0.428195"
+# [1] "Primary T cells from cord blood"
+# [1] "z=0.225759"
+# [1] "p=0.410695"
+
+```
+
+
+```{r}
+
+sessionInfo()
+
+```

@@ -1,0 +1,92 @@
+---
+title: "Generate LD blocks and compute CHEERS enrichment for BLUEPRINT and Soskic datasets"
+output: html_document
+---
+
+```{bash}
+
+LDDIR=/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR/EUR_r2_maf0p01/
+SUMSTATS=/lustre/scratch117/cellgen/team297/mel41/sumstats_clump
+
+declare -a listA
+# Note not running ASD as insufficient top loci (only 2, require minimum 10)
+listA=("crossdis" "bip" "szs" "mdd" "alz" "adhd" "bmi" "ra") 
+for f in "${listA[@]}"; do
+echo "Generating LD blocks for ${f}"
+rm -r $SUMSTATS/cheers/${f}_1kg
+python2 $SUMSTATS/cheers/create_LD_blocks_1kg.py $SUMSTATS/forcheers_${f}_1kg.tsv $SUMSTATS/cheers/${f}_1kg $LDDIR > $SUMSTATS/cheers/log_create_LD_blocks_1kg_${f}.txt
+done
+
+```
+
+Now test enrichment for all disorders by CHEERS
+```{bash}
+
+THREADS=5
+MEM=9000
+QUEUE=normal
+
+# ADHD
+f=adhd
+peaks=cytoimmgen_H3K27ac 
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+peaks=Blueprint_H3K27ac
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+
+# ALZ
+f=alz
+peaks=cytoimmgen_H3K27ac 
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+peaks=Blueprint_H3K27ac
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+
+# BMI
+f=bmi
+peaks=cytoimmgen_H3K27ac 
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+peaks=Blueprint_H3K27ac
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+
+# BIP
+f=bip
+peaks=cytoimmgen_H3K27ac 
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+peaks=Blueprint_H3K27ac
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+
+# CROSSDISORDER
+f=crossdis
+peaks=cytoimmgen_H3K27ac 
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+peaks=Blueprint_H3K27ac
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+
+# MDD
+f=mdd
+peaks=cytoimmgen_H3K27ac 
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+peaks=Blueprint_H3K27ac
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+
+# SZS
+f=szs
+peaks=cytoimmgen_H3K27ac 
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+peaks=Blueprint_H3K27ac
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+
+# RA
+f=ra
+peaks=cytoimmgen_H3K27ac 
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+peaks=Blueprint_H3K27ac
+bsub -q $QUEUE -n ${THREADS} -R"select[mem>${MEM}] rusage[mem=${MEM}] span[ptile=${THREADS}]" -M${MEM} -e $CHEERSDIR/logs/%Jerror -o $CHEERSDIR/logs/%Jout "$CHEERSDIR/CHEERS_computeEnrichment_submit_job.sh ${f} ${peaks}"
+
+```
+
+OUTPUTS:
+trait_uniquePeaks.txt - list of unique peaks and their ranks per sample
+trait _SNPsOverlappingPeaks.txt - list of all overlapping SNPs and peak ranks per sample
+trait _disease_enrichment_pValues.txt - enrichment p-values per sample
+trait _disease_enrichment_observedMeanRank.txt - observed mean specificity ranks per sample
+trait.log - log file containing run information

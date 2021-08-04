@@ -1,0 +1,279 @@
+---
+title: "Process and visualise BLUEPRINT results"
+output: html_document
+---
+
+```{r}
+
+library(ggplot2)
+library(tidyverse)
+#set_here("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+setwd("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+library(here)
+library(magrittr)
+
+```
+
+Load Blueprint H3K27ac results
+```{r}
+
+blueprint_H3K27ac_p <- list()
+blueprint_H3K27ac_meanrank <- list()
+
+# XDISS
+blueprint_H3K27ac_p[["Crossdisorder psych"]] <- read.table(here("res/cheersout_500/crossdis_Blueprint_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+blueprint_H3K27ac_meanrank[["Crossdisorder psych"]] <- read.table(here("res/cheersout_500/crossdis_Blueprint_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# SZS
+blueprint_H3K27ac_p[["Schizophrenia"]] <- read.table(here("res/cheersout_500/szs_Blueprint_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+blueprint_H3K27ac_meanrank[["Schizophrenia"]] <- read.table(here("res/cheersout_500/szs_Blueprint_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# ALZ
+blueprint_H3K27ac_p[["Alzheimer's Disease"]] <- read.table(here("res/cheersout_500/alz_Blueprint_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+blueprint_H3K27ac_meanrank[["Alzheimer's Disease"]] <- read.table(here("res/cheersout_500/alz_Blueprint_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# BMI
+blueprint_H3K27ac_p[["BMI"]] <- read.table(here("res/cheersout_500/bmi_Blueprint_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+blueprint_H3K27ac_meanrank[["BMI"]] <- read.table(here("res/cheersout_500/bmi_Blueprint_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# ADHD
+blueprint_H3K27ac_p[["ADHD"]] <- read.table(here("res/cheersout_500/adhd_Blueprint_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+blueprint_H3K27ac_meanrank[["ADHD"]] <- read.table(here("res/cheersout_500/adhd_Blueprint_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# MDD
+blueprint_H3K27ac_p[["Depression"]] <- read.table(here("res/cheersout_500/mdd_Blueprint_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+blueprint_H3K27ac_meanrank[["Depression"]] <- read.table(here("res/cheersout_500/mdd_Blueprint_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# BPD
+blueprint_H3K27ac_p[["Bipolar Disorder"]] <- read.table(here("res/cheersout_500/bip_Blueprint_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+blueprint_H3K27ac_meanrank[["Bipolar Disorder"]] <- read.table(here("res/cheersout_500/bip_Blueprint_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# RA
+blueprint_H3K27ac_p[["Rheumatoid arthritis"]] <- read.table(here("res/cheersout_500/ra_Blueprint_H3K27ac_disease_enrichment_pValues.txt"), sep="\t")
+blueprint_H3K27ac_meanrank[["Rheumatoid arthritis"]] <- read.table(here("res/cheersout_500/ra_Blueprint_H3K27ac_disease_enrichment_observedMeanRank.txt"), sep="\t")
+
+# Correct spelling error
+blueprint_H3K27ac_p <- lapply(blueprint_H3K27ac_p, function(x) {x[x=="CD38-negative_naive_B_cel"] <- "CD38-negative_naive_B_cell"; return(x)} )
+blueprint_H3K27ac_meanrank <- lapply(blueprint_H3K27ac_meanrank, function(x) {x[x=="CD38-negative_naive_B_cel"] <- "CD38-negative_naive_B_cell"; return(x)} )
+```
+
+```{r}
+
+blueprint_celllist <- c("monocyte","CD14-positive_CD16-negative_classical_monocyte" ,"macrophage","inflammatory_macrophage"  , "conventional_dendritic_cell" , "mature_conventional_dendritic_cell" ,"cytotoxic_CD56-dim_natural_killer_cell",    "CD3-positive_CD4-positive_CD8-positive_double_positive_thymocyte", "regulatory_T_cell" ,"CD4-positive_alpha-beta_T_cell", "central_memory_CD4-positive_alpha-beta_T_cell","effector_memory_CD4-positive_alpha-beta_T_cell"   ,"CD8-positive_alpha-beta_T_cell", "central_memory_CD8-positive_alpha-beta_T_cell"  , "effector_memory_CD8-positive_alpha-beta_T_cell","effector_memory_CD8-positive_alpha-beta_T_cell_terminally_differentiated", "CD38-negative_naive_B_cell","memory_B_cell" , "unswitched_memory_B_cell"    ,"class_switched_memory_B_cell")  
+blueprint_celllist_short <- c("monocyte","CD14+CD16- monocyte","macrophage","inflammatory macrophage"  , "conventional DC" , "mature conventional DC" ,"cytotoxic CD56(dim) NK cell",    "CD3+CD4+CD8+ thymocyte", "Treg" ,"CD4+ Tcell", "CD4+ T central memory","CD4+ T effector memory"   ,"CD8+ T cell", "CD8+ T central memory"  , "CD8+ T effector memory","CD8+ T effector memory (TD)", "CD38- B naive","B memory" , "unswitched B memory"    ,"class switched B memory")  
+blueprint_celltypes <- c(rep("myeloid",6), rep("NK cell",1), rep("thymocyte",1), rep("CD4+ T cell", 4), rep("CD8+ T cell", 4), rep("B cell",4))
+
+df <- data.frame(cell_condition=blueprint_celllist, cell_condition_short=blueprint_celllist_short, cell_time=blueprint_celltypes)
+
+blueprint_ncomparisons <- dim(df)[1]
+
+chm <- purrr::map_df(blueprint_H3K27ac_p, ~as.data.frame(.x), .id="condition")
+chm %<>% dplyr::rename(cell_condition=V1,value=V2)
+chm$condition <- factor(chm$condition , levels = c("Crossdisorder psych","Schizophrenia","Bipolar Disorder", "Depression", "ADHD", "BMI", "Alzheimer's Disease","Rheumatoid arthritis"))
+# Note no ASD as insufficient hits
+head(chm)
+
+chm_melt <- left_join(chm, df, by="cell_condition")
+head(chm_melt)
+
+ncomp=blueprint_ncomparisons
+
+# set to lower limit of python
+chm_melt$value[chm_melt$value == 0] <- 1e-16
+
+# Get order for graph
+chm_melt$cell_condition_short <- factor(chm_melt$cell_condition_short, levels=blueprint_celllist_short)
+
+# Order of colours in legend
+chm_melt$cell_time <- factor(chm_melt$cell_time, levels=c("myeloid","NK cell","thymocyte","CD4+ T cell","CD8+ T cell","B cell"))
+cellgrouplabeller <- c("myeloid"="#A6761D","B cell" = "#D95F02", "CD8+ T cell" = "#7570B3", 'CD4+ T cell' = "#E7298A", "NK cell" =  "#1B9E77", "thymocyte" =  "#E6AB02")
+
+```
+
+FIGURES
+```{r}
+
+# FIGURE for main: close up on XDISS, SZS, MDD, BMI, AD
+p <- ggplot(chm_melt[chm_melt$condition %in% c("Crossdisorder psych","Schizophrenia","Depression","BMI","Alzheimer's Disease"),], aes(cell_condition_short, -log10(value))) + 
+  geom_bar(aes(fill = cell_time), position = "dodge", stat="identity")  +
+  facet_wrap(~condition, scale="free_x", ncol = 5) +
+  ylab(bquote(~'-log' [10]~ 'p-value')) + 
+  xlab("") +
+  geom_hline(yintercept = -log10(0.05), linetype="dotted", color = 'black') + 
+  geom_hline(yintercept = -log10(0.05/ncomp), color = 'black') +
+  theme(axis.text = element_text(size = 12), 
+        axis.title = element_text(size = 15), 
+        panel.grid = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text.y  = element_text(size=11),
+        panel.background = element_rect(color="grey",fill=NA),
+        legend.background = element_blank())+ 
+  coord_flip() + 
+  # Matched cytoimmgen where possible on the colours (myeloid, CD4)
+  scale_fill_manual("legend", values=cellgrouplabeller, guide = guide_legend(reverse = TRUE)) +
+  guides(fill=FALSE)
+p
+ggsave(p, filename = "CHEERS_BLUEPRINT_enhancers_mini_forAI.pdf", path=here("pics"), width=7.5, height=5)
+
+# APOLLO FIGURE FOR SUPP i.e. all conditions
+p <- ggplot(chm_melt, aes(cell_condition_short, -log10(value))) + 
+  geom_bar(aes(fill = cell_time), position = "dodge", stat="identity")  +
+  facet_wrap(~condition, scale="free_x", ncol = 4) +
+  ylab(bquote(~'-log' [10]~ 'p-value')) + 
+  xlab("") +
+  geom_hline(yintercept = -log10(0.05), linetype="dotted", color = 'black') + 
+  geom_hline(yintercept = -log10(0.05/ncomp), color = 'black') +
+  theme(axis.text = element_text(size = 12), 
+        axis.title = element_text(size = 15), 
+        panel.grid = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text.y  = element_text(size=11),
+        panel.background = element_rect(color="grey",fill=NA),
+        legend.background = element_blank())+ 
+  coord_flip() + 
+  # Matched cytoimmgen where possible on the colours (myeloid, CD4)
+  scale_fill_manual("legend", values=cellgrouplabeller, guide = guide_legend(reverse = TRUE)) +
+  guides(fill=FALSE)
+p
+ggsave(p, filename = "CHEERS_BLUEPRINT_enhancers_all_forAI.pdf", path=here("pics"), width=8, height=10)
+
+
+```
+
+
+```{r}
+#### PLOT HEATMAP ####
+
+anno <- df
+rownames(anno) <- anno$cell_condition_short
+anno <- anno[,"cell_time",drop=F]
+head(anno)
+annoCols <- list()
+annoCols$cell_time <- c("myeloid" = "#d8b365", 
+                                       "CD8+ T cell" = "dark red", 
+                                       "CD4+ T cell" = "#af8dc3", 
+                                       "NK cell" = "dark green",
+                                       "thymocyte"="black",
+                                       "B cell"="dark blue")
+mean_blueprint = (1+236222)/2
+
+get_peaks <- function(uniquePeaksFile=NULL, mean=NULL, celllist=NULL){
+  peaks <- read.table(uniquePeaksFile, sep="\t", header=T, check.names = FALSE) 
+  row.names(peaks) <- paste(peaks$chr, peaks$start, peaks$end, sep = '_')
+  peaks <- peaks[c("chr", "start", "end", celllist)]
+  peaks <- peaks[,4:dim(peaks)[2]]
+  peaks[1:4,1:4]
+  #Normalize scores by mean
+  peaks <- peaks/mean
+}
+
+# Need spelling error back to index outputs
+tmp <- blueprint_celllist
+tmp[tmp=="CD38-negative_naive_B_cell"] <- "CD38-negative_naive_B_cel"
+
+# MDD peaks
+peaks=list()
+peaks$Depression <- get_peaks(here("res/cheersout_500/mdd_Blueprint_H3K27ac_uniquePeaks.txt"), mean=mean_blueprint, celllist=tmp)
+peaks$`Crossdisorder psych` <- get_peaks(here("res/cheersout_500/crossdis_Blueprint_H3K27ac_uniquePeaks.txt"), mean=mean_blueprint, celllist=tmp)
+peaks$Schizophrenia <- get_peaks(here("res/cheersout_500/szs_Blueprint_H3K27ac_uniquePeaks.txt"), mean=mean_blueprint, celllist=tmp)
+peaks$`Bipolar Disorder` <- get_peaks(here("res/cheersout_500/bip_Blueprint_H3K27ac_uniquePeaks.txt"), mean=mean_blueprint, celllist=tmp)
+peaks$ADHD <- get_peaks(here("res/cheersout_500/adhd_Blueprint_H3K27ac_uniquePeaks.txt"), mean=mean_blueprint, celllist=tmp)
+peaks$BMI <- get_peaks(here("res/cheersout_500/bmi_Blueprint_H3K27ac_uniquePeaks.txt"), mean=mean_blueprint, celllist=tmp)
+peaks$`Alzheimer's Disease` <- get_peaks(here("res/cheersout_500/alz_blueprint_H3K27ac_uniquePeaks.txt"), mean=mean_blueprint, celllist=tmp)
+peaks$`Rheumatoid arthritis` <- get_peaks(here("res/cheersout_500/ra_blueprint_H3K27ac_uniquePeaks.txt"), mean=mean_blueprint, celllist=tmp)
+
+# Correct spelling error and rename with short names
+peaks <- lapply(peaks, function(x) {colnames(x)[colnames(x)=="CD38-negative_naive_B_cel"] <- "CD38-negative_naive_B_cell"; return(x)} )
+peaks <- lapply(peaks, function(x){colnames(x) = with(df,cell_condition_short[match(names(x),cell_condition)]); return(x)}) 
+
+peaks_choice = peaks$`Crossdisorder psych`
+
+#Heatmap of ranks
+library(pheatmap)
+library(RColorBrewer)
+breaksList = seq(1, 2, by = 0.1)
+pheatmap::pheatmap(peaks_choice, 
+         annotation_col =  anno, 
+         annotation_colors = annoCols[1], 
+         border_color = F,
+         cluster_cols = F,
+         color = colorRampPalette(brewer.pal(n = 9, name = "Blues"))(length(breaksList)),
+         breaks = breaksList)
+dev.off()
+
+```
+
+Venns and upset plot of peak overlaps 
+```{r}
+
+library(ggVennDiagram)
+x <- list(`Crossdisorder\npsych`=rownames(peaks$Crossdisorder), 
+          Schizophrenia=rownames(peaks$Schizophrenia),
+          Depression=rownames(peaks$Depression),
+          `Rheumatoid\narthritis`=rownames(peaks$`Rheumatoid arthritis`)
+          )
+p <- ggVennDiagram(x, label_alpha=0, label="count") + guides(fill=FALSE)
+p
+ggsave(here("pics/CHEERS_blueprint_enhancers_venn1.pdf"), p, width=7, height=4)
+
+
+x <- list(`Crossdisorder\npsych`=rownames(peaks$Crossdisorder), 
+          Schizophrenia=rownames(peaks$Schizophrenia),
+          Depression=rownames(peaks$Depression),
+          BMI=rownames(peaks$BMI)
+          )
+p <- ggVennDiagram(x, label_alpha=0, label="count") + guides(fill=FALSE)
+p
+ggsave(here("pics/CHEERS_blueprint_enhancers_venn3.pdf"), p, width=7, height=4)
+
+
+x <- list(`Bipolar disorder`=rownames(peaks$`Bipolar Disorder`), 
+          Schizophrenia=rownames(peaks$Schizophrenia),
+          Depression=rownames(peaks$Depression),
+          BMI=rownames(peaks$BMI)
+          )
+p <- ggVennDiagram(x, label_alpha=0, label="count") + guides(fill=FALSE)
+p
+ggsave(here("pics/CHEERS_blueprint_enhancers_venn4.pdf"), p, width=7, height=4)
+
+
+x <- list(`Alzheimer's\nDisease`=rownames(peaks$`Alzheimer's Disease`),
+          `Crossdisorder\npsych`=rownames(peaks$Crossdisorder), 
+          Depression=rownames(peaks$Depression),
+          BMI=rownames(peaks$BMI)
+          )
+p <- ggVennDiagram(x, label_alpha=0, label="count") + guides(fill=FALSE)
+p
+ggsave(here("pics/CHEERS_blueprint_enhancers_venn2.pdf"), p, width=7, height=4)
+
+x <- list(ADHD=rownames(peaks$ADHD),
+          Crossdisorder=rownames(peaks$Crossdisorder), 
+          Depression=rownames(peaks$Depression),
+          BMI=rownames(peaks$BMI)
+          )
+p <- ggVennDiagram(x, label_alpha=0, label="count") + guides(fill=FALSE)
+p
+ggsave(here("pics/CHEERS_blueprint_enhancers_venn5.pdf"), p, width=7, height=4)
+
+library(ComplexHeatmap)
+x <- list(`Crossdisorder psych`=rownames(peaks$Crossdisorder), 
+          Schizophrenia=rownames(peaks$Schizophrenia),
+          `Bipolar disorder`=rownames(peaks$`Bipolar Disorder`), 
+          Depression=rownames(peaks$Depression),
+          ADHD=rownames(peaks$ADHD),
+          BMI=rownames(peaks$BMI),
+          `Alzheimer's Disease`=rownames(peaks$`Alzheimer's Disease`),
+          `Rheumatoid arthritis`=rownames(peaks$`Rheumatoid arthritis`)
+          )
+mtx <- ComplexHeatmap::make_comb_mat(x)
+
+# FIGURE: Upset plot
+pdf(file=here("pics/blueprint_upset_intersections.pdf"), width=10, height=6)
+m <- mtx[comb_degree(mtx)>1]
+ComplexHeatmap::UpSet(m, set_order = names(x), 
+                      top_annotation = upset_top_annotation(m, gp = gpar(fill='white'), height = unit(7,"cm"), annotation_name_rot = 0), 
+                      right_annotation = upset_right_annotation(m, gp = gpar(fill='white'), width = unit(7,"cm"), annotation_name_rot = 0))
+dev.off()
+
+```
+

@@ -1,0 +1,179 @@
+---
+title: "Find nearest genes and perform overrepresentation (pathway) analysis"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+#set_here("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+setwd("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+library(here)
+library(ChIPseeker)
+
+# Loads cytoimmgen CHEERS results, including the snps overlapping peaks 
+load(here("res/cheers_cytoimmgen_processed.RData"))
+
+# T cells
+t_celllist <- c('naive_16H_UNS', 'naive_D5_UNS','memory_16H_UNS', 'memory_D5_UNS',  'naive_16H_TH0', 'naive_16H_TH1', 'naive_16H_TH2', 'naive_16H_TH17', 'naive_16H_ITREG', 'naive_16H_IL10', 'naive_16H_IL21', 'naive_16H_IL27', 'naive_16H_IFNB', 'naive_16H_TNFA', 'naive_D5_TH0',  'naive_D5_TH1', 'naive_D5_TH2', 'naive_D5_TH17', 'naive_D5_ITREG', 'naive_D5_IL10', 'naive_D5_IL21', 'naive_D5_IL27', 'naive_D5_IFNB', 'naive_D5_TNFA', 'memory_16H_TH0', 'memory_16H_TH1', 'memory_16H_TH2', 'memory_16H_TH17', 'memory_16H_ITREG', 'memory_16H_IL10', 'memory_16H_IL21', 'memory_16H_IL27', 'memory_16H_IFNB', 'memory_16H_TNFA', 'memory_D5_TH0', 'memory_D5_TH1', 'memory_D5_TH2', 'memory_D5_TH17', 'memory_D5_ITREG', 'memory_D5_IL10', 'memory_D5_IL21', 'memory_D5_IL27', 'memory_D5_IFNB', 'memory_D5_TNFA')
+
+lynall_get_top_peaks <- function(pValsFile=NULL, uniquePeaksFile=NULL, celllist=NULL){
+  # Function gets top 10% of peaks active in the significantly enriched cell subsets (Bonferroni p<0.05)
+  # Output is vector of peaks
+  pvals <- read.table(pValsFile, sep="\t")
+  library(magrittr)
+  pvals %<>% dplyr::rename(cell_condition=V1,value=V2)
+  print(sprintf("There are %d used cell types as follows:", length(celllist))) 
+  print(celllist)
+  if (length(celllist)==0){
+    return(NA)
+  } else {
+    peaks <- read.table(uniquePeaksFile, sep="\t", header=T)[,c("chr","start","end",celllist)]
+    peaks$peak <- paste(peaks$chr, peaks$start, peaks$end, sep = '_')
+    # For each cell type, convert to percetile ranks (scales 0 --> 1)
+    peaks_rank <- dplyr::mutate(peaks, across(.cols=all_of(celllist), percent_rank))
+    # Keep any peaks with percentile rank >=0.9 in any of the sig cell types
+    peaks_top <- peaks_rank %>% filter_at(vars(all_of(celllist)), .vars_predicate = any_vars(. >= 0.9)) %>% dplyr::arrange(peak)
+  }
+}
+
+top_peaks <- list()
+# Include those disorders showing T cell enrichment in cytoimmgen
+for (i in c("bmi","mdd","crossdis","szs","ra")){
+  print(i)
+  top_peaks[[i]] <- lynall_get_top_peaks(pValsFile=here(paste0("res/cheersout_500/",i,"_cytoimmgen_H3K27ac_disease_enrichment_pValues.txt")), uniquePeaksFile=here(paste0("res/cheersout_500/",i,"_cytoimmgen_H3K27ac_uniquePeaks.txt")), celllist=t_celllist)
+}
+
+length(top_peaks)
+
+```
+
+Prepare peaks as granges for ChIPseeker
+```{r}
+
+library(GenomicRanges)
+peaks_top_granges <- lapply(top_peaks, function(x) {GenomicRanges::makeGRangesFromDataFrame(x,
+                         keep.extra.columns=FALSE,
+                         ignore.strand=TRUE,
+                         seqnames.field="chr",
+                         start.field="start",
+                         end.field="end",
+                         starts.in.df.are.0based=FALSE)})
+
+```
+
+Load organism databases required for seq2gene
+```{r}
+
+library(org.Hs.eg.db)
+library(EnsDb.Hsapiens.v86) 
+edb <- EnsDb.Hsapiens.v86
+genomeStyles()$Homo_sapiens
+seqlevelsStyle(edb) <- "UCSC"
+
+```
+
+Get union of exons / introns overlapping peaks and nearest genes. Main modification of lynall_seq2gene compared to CHiPseeker::seq2gene is to retain information about what the peak is overlapping in the function output. A single peak can overlap multiple genomic features (an exon, an intron, a promoter of another gene etc.)
+```{r}
+source(here("workflow/scripts/functions/lynall_seq2gene.R"))
+out <- lapply(peaks_top_granges, function(x) {lynall_seq2gene(x, tssRegion = c(-3000, 3000), flankDistance = 10000, TxDb=edb, sameStrand = FALSE)})
+```
+
+
+Over-representation analysis using pooled reactome and GO (Biological Processes) pathways.
+
+```{r}
+
+# Make term2gene for reactome
+reactome <- read.csv("/Users/mary/non_dropbox/exps/exp042_meninges_stress_dropseq/data/raw/reactome_download/Ensembl2Reactome_All_Levels.txt", sep="\t", header=F)
+react <- reactome %>% dplyr::filter(grepl("R-HSA-",V2)) %>% dplyr::filter(grepl("ENSG",V1)) 
+human_t2g_reactome <- data.frame(gs_name=react$V4, ens=react$V1)
+
+# Get GO term2gene
+library(msigdbr) # Requires version 7.4.1
+tmp = msigdbr(species = "human", category = "C5", subcategory = "GO:BP")
+human_t2g_go <- data.frame(gs_name=tmp$gs_name, ens=tmp$ensembl_gene, symbol=tmp$human_gene_symbol)
+
+# Prettify
+human_t2g_go$gs_name <- gsub("GOBP_","",human_t2g_go$gs_name)
+human_t2g_go$gs_name <- gsub("_"," ",human_t2g_go$gs_name)
+human_t2g_go$gs_name <- paste0(human_t2g_go$gs_name," (GO)")
+
+library(magrittr)
+human_t2g_reactome$gs_name %<>% toupper
+human_t2g_reactome$gs_name <- paste0(human_t2g_reactome$gs_name," (Reactome)")
+
+human_t2g_pooled <- bind_rows(human_t2g_go, human_t2g_reactome)
+
+# Do pooled reactome and GO over-representation analysis
+library(clusterProfiler)
+enrichout_pooled <- lapply(out, function(x){enricher(gene=x$unique_genes,minGSSize = 10, maxGSSize = 500, TERM2GENE = human_t2g_pooled)})
+
+# And show the sig results
+enrichout_pooled_readable <- lapply(enrichout_pooled, function(x) {setReadable(x, 'org.Hs.eg.db', 'ENSEMBL')})
+result_pooled <- lapply(enrichout_pooled_readable, function(x){x@result[x@result$p.adjust<0.05,c("p.adjust", "geneID","Count")]})
+
+```
+
+Print results to file
+```{r}
+for (i in c("bmi","mdd","crossdis","szs", "ra")){
+  write.table(result_pooled[[i]], file=here(paste0("res/overrepresentation_tcells_",i,".tsv")), row.names = T, quote=F, sep="\t")
+}
+
+for (i in c("bmi","mdd","crossdis","szs", "ra")){
+  write.table(out[[i]]$unique_genes, file=here(paste0("res/overrepresentation_tcells_uniquegenes_",i,".tsv")), row.names = F, col.names=T, quote=F, sep="\t")
+}
+
+```
+
+Make GSEA plots for supplementary, showing top 10 significant pathways
+Show -log10 p-value on x-axis and colour by gene ratio, filtering on p(adj)<0.05
+```{r}
+
+# What is the range of geneRatios across all?
+grmax <- NULL
+grmin <- NULL
+for (i in 1:length(enrichout_pooled_readable)){
+  gr <- enrichout_pooled_readable[[i]]@result %>% dplyr::filter(p.adjust<0.05) 
+  gr <- gr %>% rowwise() %>% dplyr::mutate(geneRatio = eval(parse(text = GeneRatio)))
+  grmax[i] <- max(gr$geneRatio)
+  grmin[i] <- min(gr$geneRatio)
+}
+grmax
+grmin
+# Choose visualization range 0 --> 0.4 as this will cover the range for all disorders
+
+lynall_ora_plot <- function(oraout, name="Unnamed", padjthh=0.05, picwidth=15, topn=10){
+  df <- oraout@result %>% dplyr::arrange(p.adjust)
+  df <- df[1:topn,]
+  df %<>% dplyr::filter(p.adjust<padjthh) 
+  df$ID %<>% factor(levels=rev(unique(df$ID)), ordered = T)
+  df$geneRatio <- sapply(df$GeneRatio, function(x){eval(parse(text = x))})
+  p <- ggplot(df, aes(x = -log10(pvalue), y = ID, color=geneRatio)) + 
+        geom_point(size=4) + 
+        theme_bw(base_size = 14) +
+        scale_color_gradient(low="yellow",high="red", limits=c(0,0.32), breaks=c(0,0.1,0.2,0.3)) +
+        ylab(NULL) +
+        expand_limits(x=0) +
+        theme(legend.title = element_blank()) +
+        xlab("-log10(p-value)") +
+        ggtitle(name)
+  print(p)
+  ggsave(p,path=here::here("pics/"),filename=paste0("ora_out_",name,".pdf"),width=picwidth,height=(2+nrow(df)*0.11))
+  p
+}
+
+# Plot results for T cell enriched disorders i.e. Xdiss, SZS, MDD, RA, BMI. Nil sig for BMI so not shown
+plots <- list()
+for (i in c("bmi","mdd","crossdis","szs", "ra")){
+   plots[[i]] <- lynall_ora_plot(oraout=enrichout_pooled_readable[[i]], name=i, padjthh=0.05, picwidth=10, topn=10)
+   print(plots[[i]])
+}
+
+g <- cowplot::plot_grid(plotlist=list(plots$crossdis, plots$szs, plots$mdd, plots$ra), ncol=1, align="v", rel_heights=c(1,1,0.45,1))
+
+ggsave(g, filename=here("pics/ora_for_supp_select.pdf"), width=11, height=12)
+```
+
+

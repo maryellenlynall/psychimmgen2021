@@ -1,0 +1,36 @@
+---
+title: "Process ADHD sumstats and do s-LDSC"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+Demontis GWAS 2017: https://www.nature.com/articles/s41588-018-0269-7.pdf
+adhd_eur_jun2017.gz: European ancestry meta-analysis (19,099 cases, 34,194 controls)
+
+Munge sumstats
+```{bash}
+
+LDSCDIR=/Users/mary/non_dropbox/exps/ldsc
+cd $LDSCDIR
+FORLDSCDIR=~/Library/Mobile\ Documents/com~apple~CloudDocs/Documents/research/exps/forldsc
+
+deactivate
+conda activate ldsc
+
+${LDSCDIR}/munge_sumstats.py --sumstats /Users/mary/Documents/research/exps/summary_stats/adhd/adhd_eur_jun2017 --N-cas 19099 --N-con 34194 --signed-sumstats OR,1 --merge-alleles ${FORLDSCDIR}/w_hm3.snplist --out adhd_demontis --snp SNP --chunksize 500000 --a1 A1 --a2 A2 --p P --info INFO 
+
+```
+
+s-LDSC
+```{bash}
+
+cd $LDSCDIR
+cts_name=IDEASv1_active
+
+# Ensure we are using original rather than conditional model
+cp $LDSCDIR/${cts_name}_original.ldcts $LDSCDIR/$cts_name.ldcts
+
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/adhd_demontis.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out adhd_demontis_cts_${cts_name} --ref-ld-chr-cts $LDSCDIR/$cts_name.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+
+```

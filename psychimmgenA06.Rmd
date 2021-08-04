@@ -1,0 +1,88 @@
+---
+title: "Make thin annots from the separate annotations bed files (promoters, genic enhancers, nongenic enhancers) and make ldcts regression files in preparation for s-LDSC"
+output: html_document
+---
+
+```{bash}
+LDSCDIR=/Users/mary/non_dropbox/exps/ldsc
+cd $LDSCDIR
+
+# to get out of python3
+conda deactivate 
+conda activate ldsc
+
+FORLDSCDIR=~/Library/Mobile\ Documents/com~apple~CloudDocs/Documents/research/exps/forldsc
+LDSCDIR=/Users/mary/non_dropbox/exps/ldsc
+IDEASDIR=/Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/tmp/ENCODE/IDEAS
+
+```
+
+```{r}
+# Get brain and immune tissues (NON-cell lines)
+setwd("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+library(here)
+library(tidyverse)
+library(magrittr)
+load(here("data/raw/roadmap/roadmap_sample_info_tidy.Rdata"))
+head(roadmap_names)
+
+# Dropping IPSC/ESC/ESC-derived cells and mesenchymal stem cell derived cells, cell lines and cultured cells from all analyses.
+roadmap_names %<>% dplyr::filter(!type_mini %in% "IPSC / ESC / ESC-derived")
+other_lines <- c("K562 Leukemia Cells", "HSMM cell derived Skeletal Muscle Myotubes Cells","HSMM Skeletal Muscle Myoblasts Cells","HepG2 Hepatocellular Carcinoma Cell Line","HeLa-S3 Cervical Carcinoma Cell Line","GM12878 Lymphoblastoid Cells","Dnd41 TCell Leukemia Cell Line","A549 EtOH 0.02pct Lung Carcinoma Cell Line","Mesenchymal Stem Cell Derived Adipocyte Cultured Cells","Adipose Derived Mesenchymal Stem Cell Cultured Cells","IMR90 fetal lung fibroblasts Cell Line","Mesenchymal Stem Cell Derived Chondrocyte Cultured Cells","Bone Marrow Derived Cultured Mesenchymal Stem Cells","Muscle Satellite Cultured Cells", "Primary hematopoietic stem cells short term culture") 
+roadmap_names %<>% dplyr::filter(!name %in% other_lines)
+
+immune_and_brain <- roadmap_names %>% dplyr::filter(type_mini %in% c("Blood/immune","Brain")) 
+
+ldscdir <- "/Users/mary/non_dropbox/exps/ldsc/"
+ideasdir <- "/Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/tmp/ENCODE/IDEAS/"
+
+# 3 annotations comprising active regulatory elements (4_Enh = nongenic enhancers)
+annotations <- c("4_Enh","promoter","genicenhancer")
+for (i in annotations){
+  # Add prefix in format that ldsc needs
+  immune_and_brain$prefix <- paste0("IDEASv1_ldscores_separate/","IDEASv1_",i,"_",immune_and_brain$EID,".")
+  write.table(immune_and_brain %>% dplyr::select(mnemonic, prefix), file=paste0(ldscdir,"IDEASv1_",i,".ldcts"), sep="\t", col.names = FALSE, row.names = FALSE, quote = FALSE)
+}
+
+# FWrite list of tissues and chromosomes for later bash arrays
+write.table(immune_and_brain %>% dplyr::pull(EID), file=paste0(ldscdir,"IDEASv1_ldscores_separate/tissues_immune_and_brain.txt"), col.names = FALSE, row.names = FALSE, quote = FALSE)
+
+# Save annotations
+write.table(annotations, file=paste0(ldscdir,"IDEASv1_ldscores_separate/annotations.txt"), col.names = FALSE, row.names = FALSE, quote = FALSE)
+
+```
+
+Make thin annots
+```{bash}
+
+tissues=(`cat "$LDSCDIR/IDEASv1_ldscores/tissues_immune_and_brain.txt"`)
+chromosomes=(`cat "$IDEASDIR/chromosomes.txt"`)
+annots=(`cat "$LDSCDIR/IDEASv1_ldscores/annotations.txt"`)
+
+for ANNOT in "${annots[@]}"; do
+echo $ANNOT
+for TISSUE in "${tissues[@]}"
+  do
+  echo $TISSUE
+  for CHR in "${chromosomes[@]}"
+    do
+    echo $CHR
+    if [[ -f ${LDSCDIR}/IDEASv1_ldscores_separate/IDEASv1_${ANNOT}_${TISSUE}.${CHR}.annot.gz ]]; then
+      echo "Annot already made"
+    else
+      echo "Making annot"
+      python ${LDSCDIR}/make_annot.py \
+--bed-file ${IDEASDIR}/${TISSUE}.${ANNOT}.bed.gz \
+--bimfile ${LDSCDIR}/1000G_EUR_Phase3_plink/1000G.EUR.QC.${CHR}.bim \
+--annot-file $LDSCDIR/IDEASv1_ldscores_separate/IDEASv1_${ANNOT}_${TISSUE}.${CHR}.annot.gz
+    fi
+    done
+  done
+done
+
+# Sanity check 
+cd $IDEASDIR
+gzip -cd IDEASv1_4_Enh_E039.22.annot.gz | wc -l
+```
+
+

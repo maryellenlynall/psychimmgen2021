@@ -1,0 +1,44 @@
+---
+title: "Process BMI sumstats and do s-LDSC"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+This is bmi_pulit2018, which is the largest (and most recent) meta-analysis from the GIANT consortium. It is GIANT + UKB: 
+https://academic.oup.com/hmg/article/28/1/166/5098227
+
+Summary stats downloaded from here:
+https://zenodo.org/record/1251813#.X_iGVS-l1TZ
+
+file = bmi.giant-ukbb.meta-analysis.combined.23May2018.txt
+Meta-analysis of body mass index (bmi) in UK Biobank and GIANT data. Combined set of samples, max N = 806,834.
+
+Munge sumstats
+```{bash}
+# Remove interfering colons in rsID column 
+sed 's/:[ATCG]:[ATCG]//' ~/Documents/research/exps/summary_stats/bmi/bmi.giant-ukbb.meta-analysis.combined.23May2018.txt > ~/Documents/research/exps/summary_stats/bmi/bmi_pulit2018_tidy.txt
+rm ~/Documents/research/exps/summary_stats/bmi/bmi.giant-ukbb.meta-analysis.combined.23May2018.txt 
+
+LDSCDIR=/Users/mary/non_dropbox/exps/ldsc
+cd $LDSCDIR
+FORLDSCDIR=~/Library/Mobile\ Documents/com~apple~CloudDocs/Documents/research/exps/forldsc
+
+deactivate
+conda activate ldsc
+
+${LDSCDIR}/munge_sumstats.py --sumstats /Users/mary/Documents/research/exps/summary_stats/bmi/bmi_pulit2018_tidy.txt --N-col N --signed-sumstats BETA,0 --merge-alleles ${FORLDSCDIR}/w_hm3.snplist --out bmi_pulit --snp SNP --chunksize 500000 --a1 Tested_Allele --a2 Other_Allele --p P --frq Freq_Tested_Allele --info INFO 
+
+```
+s-LDSC
+```{bash}
+
+cd $LDSCDIR
+cts_name=IDEASv1_active
+
+# Ensure we are using original rather than conditional analysis
+cp $LDSCDIR/${cts_name}_original.ldcts $LDSCDIR/$cts_name.ldcts
+
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/bmi_pulit.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out bmi_pulit_cts_${cts_name} --ref-ld-chr-cts $LDSCDIR/$cts_name.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+
+```

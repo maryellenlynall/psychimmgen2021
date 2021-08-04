@@ -1,0 +1,40 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+Jansen 2019 doi: 10.1038/s41588-018-0311-9
+Downloaded on 20201026 from https://ctg.cncr.nl/software/summary_statistics
+71,880 cases, 383,378 controls
+
+Note have used updated version (update Dec 2019): "AD_sumstats_Jansenetal_2019sept.txt.gz are an updated version of the original summary statistics. In the meta-analysis of the previous version, the UKB dataset was weighted with an incorrect sample size, overestimating it by max 22,246 (5%). This resulted in a slight underestimate of effect sizes and slightly less significant P-values (in the order of the 9th decimal).We have reran the meta-analysis and have uploaded the new summary statistics. For new analyses we advise to use the updated version of the summary statistics."
+
+Munge sumstats
+```{bash}
+
+LDSCDIR=/Users/mary/non_dropbox/exps/ldsc
+cd $LDSCDIR
+FORLDSCDIR=~/Library/Mobile\ Documents/com~apple~CloudDocs/Documents/research/exps/forldsc
+
+deactivate
+conda activate ldsc
+
+${LDSCDIR}/munge_sumstats.py --sumstats /Users/mary/Library/Mobile\ Documents/com~apple~CloudDocs/Documents/research/exps/summary_stats/alz/AD_sumstats_Jansenetal_2019sept.txt --signed-sumstats Z,0 --merge-alleles ${FORLDSCDIR}/w_hm3.snplist --out alz_jansen --chunksize 500000 --p P --snp SNP --a1 A1 --a2 A2 --N-col Nsum --frq EAF 
+
+```
+
+s-LDSC
+```{bash}
+
+cd $LDSCDIR
+cts_name=IDEASv1_active
+
+# Ensure we are using original rather than conditional models
+cp $LDSCDIR/${cts_name}_original.ldcts $LDSCDIR/$cts_name.ldcts
+# Must type "y"
+
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/alz_jansen.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out alz_jansen_cts_${cts_name} --ref-ld-chr-cts $LDSCDIR/$cts_name.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+
+```

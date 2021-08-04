@@ -1,0 +1,35 @@
+---
+title: "Process MDD sumstats and do s-LDSC"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+```{bash}
+
+# Set directory location
+LDSCDIR=/Users/mary/non_dropbox/exps/ldsc
+FORLDSCDIR=~/Library/Mobile\ Documents/com~apple~CloudDocs/Documents/research/exps/forldsc
+
+condat deactivate # to get out of python3
+conda activate ldsc
+
+./munge_sumstats.py --sumstats /Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/raw/summary_stats/mdd_mvp_collaboration/23andMeRemoved_Howard_FINNGEN_ICDdepMVP.txt --N 846913 --N-cas 264984 --N-con 581929 --signed-sumstats EFFECT,0 --merge-alleles ${FORLDSCDIR}/w_hm3.snplist --out mvp_mdd --chunksize 500000
+
+```
+
+Run s-LDSC
+```{bash}
+
+LDSCDIR=/Users/mary/non_dropbox/exps/ldsc
+cts_name=IDEASv1_active
+
+cd $LDSCDIR
+
+python ${LDSCDIR}/ldsc.py --h2-cts $LDSCDIR/mvp_mdd.sumstats.gz --ref-ld-chr ${LDSCDIR}/baseline_v1.2/baseline. --out mdd_mvp_cts_${cts_name} --ref-ld-chr-cts $LDSCDIR/$cts_name.ldcts --w-ld-chr ${LDSCDIR}/1000G_Phase3_weights_hm3_no_MHC/weights.hm3_noMHC. 
+
+```
+
+
+
+
