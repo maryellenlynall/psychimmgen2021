@@ -1,0 +1,23 @@
+# Filter SNPs to 1KG subset
+
+cd /lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR
+chr=$1
+
+FILE="/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR/ALL.chr${chr}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz"
+SAMPLESFILE="/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR/selected_hg38_eur_id.txt"
+OUTPUT="/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR/EUR.chr${chr}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz"
+OUTPUT2="/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR/EUR.chr${chr}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.maf0.01.vcf.gz"
+
+bcftools view --samples-file $SAMPLESFILE -o $OUTPUT --output-type z $FILE
+bcftools view --include 'EUR_AF>0.01 && EUR_AF<0.99' --output $OUTPUT2 --output-type z --no-update $OUTPUT 
+bcftools view -s NA20818,NA20819 --include 'EUR_AF>0.01 && EUR_AF<0.99' $OUTPUT | head -35
+
+# Now make the SNP ID the same as hm_variant_id
+OUTPUT3="/lustre/scratch117/cellgen/team297/mel41/sumstats_clump/cheers/1KG_HG38_EUR/EUR.chr${chr}.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.maf0.01.annot.vcf.gz"
+
+bcftools annotate --set-id +'%CHROM\_%POS\_%REF\_%ALT' --output $OUTPUT3 --output-type z $OUTPUT2
+
+rm $OUTPUT
+rm $OUTPUT2
+
+echo "Chromosome ${chr} done"
