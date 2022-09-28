@@ -1,6 +1,8 @@
 # psychimmgen2021
 
-Code to accompany paper Lynall 2021
+Code to accompany paper: 
+Lynall et al. Nature Communications 2022 
+Genetic variants associated with psychiatric disorders are enriched at epigenetically active sites in lymphoid cells
 
 ## Datasets generated
 
