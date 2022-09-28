@@ -44,3 +44,14 @@ Partitioned LD scores for active regulatory regions for ROADMAP epigenomics tiss
 - psychimmgenB09	Process and visualise Soskic dataset results
 - psychimmgenB10	Z-test to compare results for stimulated vs. unstimulated immune cells
 - psychimmgenB11	Find nearest genes and perform overrepresentation (pathway) analysis
+
+### Response to reviewers
+- psychimmgen_revisions01 Identify and visualise Soskic MDD-SZS discordant variant-peak overlaps
+- psychimmgen_revisions02 Identify and visualise Blueprint MDD-SZS discordant variant-peak overlaps
+- psychimmgen_revisions03 Blueprint vs Soskic – is replication driven by overlap of regulatory elements?
+- psychimmgen_revisions04 Characteristics of Soskic and Blueprint MDD-SZS discordant peaks 
+
+
+
+
+
