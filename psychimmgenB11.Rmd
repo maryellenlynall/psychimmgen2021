@@ -75,10 +75,11 @@ seqlevelsStyle(edb) <- "UCSC"
 
 Get union of exons / introns overlapping peaks and nearest genes. Main modification of lynall_seq2gene compared to CHiPseeker::seq2gene is to retain information about what the peak is overlapping in the function output. A single peak can overlap multiple genomic features (an exon, an intron, a promoter of another gene etc.)
 ```{r}
+
 source(here("workflow/scripts/functions/lynall_seq2gene.R"))
 out <- lapply(peaks_top_granges, function(x) {lynall_seq2gene(x, tssRegion = c(-3000, 3000), flankDistance = 10000, TxDb=edb, sameStrand = FALSE)})
-```
 
+```
 
 Over-representation analysis using pooled reactome and GO (Biological Processes) pathways.
 
@@ -90,6 +91,8 @@ react <- reactome %>% dplyr::filter(grepl("R-HSA-",V2)) %>% dplyr::filter(grepl(
 human_t2g_reactome <- data.frame(gs_name=react$V4, ens=react$V1)
 
 # Get GO term2gene
+#library(remotes)
+#remotes::install_version("msigdbr","7.4.1")
 library(msigdbr) # Requires version 7.4.1
 tmp = msigdbr(species = "human", category = "C5", subcategory = "GO:BP")
 human_t2g_go <- data.frame(gs_name=tmp$gs_name, ens=tmp$ensembl_gene, symbol=tmp$human_gene_symbol)
@@ -104,8 +107,11 @@ human_t2g_reactome$gs_name %<>% toupper
 human_t2g_reactome$gs_name <- paste0(human_t2g_reactome$gs_name," (Reactome)")
 
 human_t2g_pooled <- bind_rows(human_t2g_go, human_t2g_reactome)
+sample_n(human_t2g_pooled,20)
 
 # Do pooled reactome and GO over-representation analysis
+#remotes::install_url("https://bioconductor.org/packages/3.14/bioc/src/contrib/clusterProfiler_4.2.2.tar.gz")
+# NB. enricher uses phyper(...,lower.tail = FALSE) i.e. one-sided hypergeometric test
 library(clusterProfiler)
 enrichout_pooled <- lapply(out, function(x){enricher(gene=x$unique_genes,minGSSize = 10, maxGSSize = 500, TERM2GENE = human_t2g_pooled)})
 
@@ -116,6 +122,62 @@ result_pooled <- lapply(enrichout_pooled_readable, function(x){x@result[x@result
 ```
 
 Print results to file
+
+Unique gene lists for each disorder
+```{r}
+
+nearestgenes <- lapply(out, function(x){x$full_dataframe %>% select(peak_location, gene, symbol, overlap_type)})
+
+uniquenearestgenes <- lapply(nearestgenes, function(x){x %>% select(gene,symbol) %>% distinct()})
+
+# FOR SUPPLEMENTARY TABLE 5
+for (i in c("bmi","mdd","crossdis","szs", "ra")){
+  write.table(uniquenearestgenes[[i]], file=here(paste0("res/overrepresentation_tcells_uniquenearestgenes_",i,".tsv")), row.names = F, quote=F, sep="\t")
+}
+
+# Number of unique nearest genes
+lapply(uniquenearestgenes,nrow)
+#bmi 592
+#mdd 65
+#crossdis 99
+#szs 100
+#ra 53
+
+# The unique nearest genes found in significantly enriched pathways 
+uniquegenesinpathway <- lapply(enrichout_pooled_readable, function(x){unique(strsplit(paste(x[,"geneID"],collapse="/"),"/")[[1]])}) 
+
+# Proportion in enriched pathways
+for (i in c("bmi","mdd","crossdis","szs", "ra")){
+  print(i)
+  print(sprintf("Total input genes: %d", nrow(uniquenearestgenes[[i]])))
+  print(sprintf("Total genes in significantly enriched pathways: %d", length(uniquegenesinpathway[[i]])))
+  print(sprintf("Percent in pathway = %f", length(uniquegenesinpathway[[i]])/nrow(uniquenearestgenes[[i]])*100))
+}
+
+# [1] "bmi"
+# [1] "Total input genes: 592"
+# [1] "Total genes in significantly enriched pathways: 0"
+# [1] "Percent in pathway = 0.000000"
+# [1] "mdd"
+# [1] "Total input genes: 65"
+# [1] "Total genes in significantly enriched pathways: 8"
+# [1] "Percent in pathway = 12.307692"
+# [1] "crossdis"
+# [1] "Total input genes: 99"
+# [1] "Total genes in significantly enriched pathways: 21"
+# [1] "Percent in pathway = 21.212121"
+# [1] "szs"
+# [1] "Total input genes: 100"
+# [1] "Total genes in significantly enriched pathways: 32"
+# [1] "Percent in pathway = 32.000000"
+# [1] "ra"
+# [1] "Total input genes: 53"
+# [1] "Total genes in significantly enriched pathways: 23"
+# [1] "Percent in pathway = 43.396226"
+
+```
+
+The below are the easiest way to see the genes driving the enrichment results - have transferred these onto the figure S8
 ```{r}
 for (i in c("bmi","mdd","crossdis","szs", "ra")){
   write.table(result_pooled[[i]], file=here(paste0("res/overrepresentation_tcells_",i,".tsv")), row.names = T, quote=F, sep="\t")
@@ -124,6 +186,8 @@ for (i in c("bmi","mdd","crossdis","szs", "ra")){
 for (i in c("bmi","mdd","crossdis","szs", "ra")){
   write.table(out[[i]]$unique_genes, file=here(paste0("res/overrepresentation_tcells_uniquegenes_",i,".tsv")), row.names = F, col.names=T, quote=F, sep="\t")
 }
+
+# Proportion of genes picked out in overrepresentation analysis
 
 ```
 
