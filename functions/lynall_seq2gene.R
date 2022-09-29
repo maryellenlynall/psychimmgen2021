@@ -62,11 +62,15 @@ lynall_seq2gene <- function (seq, tssRegion, flankDistance, TxDb, sameStrand = F
                                   ifelse(abs(distance)<flankDistance, "within_flank", NA))
   
   genes <- c(exons$gene, introns$gene, promoters, nearest_genes)
+  df_exons <- as.data.frame(exons) %>% dplyr::select(peak_location,gene,annotation,overlap_type)
+  df_introns <- as.data.frame(introns) %>% dplyr::select(peak_location,gene,annotation,overlap_type)
+  df_dist <- as.data.frame(idx.dist) %>% dplyr::filter(!is.na(overlap_type)) %>% dplyr::select(peak_location,gene,overlap_type, distance)
+  
   df <- bind_rows(
-    as.data.frame(exons) %>% dplyr::select(peak_location,gene,annotation,overlap_type),
-    as.data.frame(introns) %>% dplyr::select(peak_location,gene,annotation,overlap_type),
-    as.data.frame(idx.dist) %>% dplyr::filter(!is.na(overlap_type)) %>% dplyr::select(peak_location,gene,overlap_type, distance)
-  ) %>% dplyr::arrange(peak_location)
+    if(nrow(df_exons)>0) df_exons,
+    if(nrow(df_introns)>0) df_introns,
+    if(nrow(df_dist)>0) df_dist,
+    ) %>% dplyr::arrange(peak_location)
   
   df$symbol <- AnnotationDbi::mapIds(org.Hs.eg.db,
                               keys=df$gene,
@@ -75,6 +79,8 @@ lynall_seq2gene <- function (seq, tssRegion, flankDistance, TxDb, sameStrand = F
                               multiVals="first")
   df %>% dplyr::filter(is.na(symbol))
   
+  idx.dist$overlap_type[is.na(idx.dist$overlap_type)] <- "None"
+  
   print(sprintf("%d unique genes identified",length(unique(genes))))
-  return(list(unique_genes=unique(genes), full_dataframe=df))
+  return(list(unique_genes=unique(genes), full_dataframe=df, nearest_tss=idx.dist))
 }
