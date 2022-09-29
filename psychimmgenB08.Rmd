@@ -186,6 +186,32 @@ peaks$`Rheumatoid arthritis` <- get_peaks(here("res/cheersout_500/ra_blueprint_H
 peaks <- lapply(peaks, function(x) {colnames(x)[colnames(x)=="CD38-negative_naive_B_cel"] <- "CD38-negative_naive_B_cell"; return(x)} )
 peaks <- lapply(peaks, function(x){colnames(x) = with(df,cell_condition_short[match(names(x),cell_condition)]); return(x)}) 
 
+
+# Get overlapping SNPs
+blueprint_H3K27ac_snps <- list()
+blueprint_H3K27ac_snps[["Crossdisorder psych"]] <- read.table(here("res/cheersout_500/crossdis_blueprint_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+blueprint_H3K27ac_snps[["Schizophrenia"]] <- read.table(here("res/cheersout_500/szs_blueprint_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+blueprint_H3K27ac_snps[["Alzheimer's Disease"]] <- read.table(here("res/cheersout_500/alz_blueprint_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+blueprint_H3K27ac_snps[["BMI"]] <- read.table(here("res/cheersout_500/bmi_blueprint_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+blueprint_H3K27ac_snps[["ADHD"]] <- read.table(here("res/cheersout_500/adhd_blueprint_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+blueprint_H3K27ac_snps[["Depression"]] <- read.table(here("res/cheersout_500/mdd_blueprint_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+blueprint_H3K27ac_snps[["Bipolar Disorder"]] <- read.table(here("res/cheersout_500/bip_blueprint_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+blueprint_H3K27ac_snps[["Rheumatoid arthritis"]] <- read.table(here("res/cheersout_500/ra_blueprint_H3K27ac_SNPsOverlappingPeaks.txt"), sep="\t", header=T)
+
+blueprint_H3K27ac_snps <- lapply(blueprint_H3K27ac_snps, function(x){x$X <- NULL; return(x)})
+
+# Subselect SNPs overlapping the peaks of interest
+pull_overlapping_snps = function(choice_peaks, snps){
+  snps$peak <- paste(snps$chr, snps$start, snps$end, sep="_")
+  overlaps <- sapply(choice_peaks, function(x) {snps[snps$peak %in% x,"snp"]}, USE.NAMES = TRUE)
+}
+
+overlaps <- sapply(names(blueprint_H3K27ac_snps), function(x){pull_overlapping_snps(choice_peaks=rownames(peaks[[x]]), snps=blueprint_H3K27ac_snps[[x]])})
+
+```
+
+
+```{r}
 peaks_choice = peaks$`Crossdisorder psych`
 
 #Heatmap of ranks
@@ -274,6 +300,13 @@ ComplexHeatmap::UpSet(m, set_order = names(x),
                       top_annotation = upset_top_annotation(m, gp = gpar(fill='white'), height = unit(7,"cm"), annotation_name_rot = 0), 
                       right_annotation = upset_right_annotation(m, gp = gpar(fill='white'), width = unit(7,"cm"), annotation_name_rot = 0))
 dev.off()
+
+```
+
+Save objects
+```{r}
+
+save(blueprint_celllist, blueprint_H3K27ac_snps, blueprint_H3K27ac_p, peaks, overlaps, anno, annoCols, file = here("res/cheers_blueprint_processed.RData"))
 
 ```
 
