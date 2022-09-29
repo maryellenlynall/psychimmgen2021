@@ -1,0 +1,73 @@
+---
+title: "Blueprint vs Soskic - Is replication driven by overlap of regulatory elements?"
+output: html_document
+---
+
+```{r}
+
+library(ggplot2)
+library(tidyverse)
+#set_here("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+setwd("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+library(here)
+load(here("res/discordant_peaks_soskic.RData"))
+load(here("res/discordant_peaks_blueprint.RData"))
+
+```
+
+Reviewer question - is replication due to overlap in regulatory elements /  consistent regulatory regions?
+
+Approach = compare similarity of the overlapped peaks
+1) define "T-cell specific" peaks in Blueprint and Soskic
+2) designate as 'shared' those overlapping eachother (counting any overlap as overlap)
+3) Calculate % overlapping 
+
+```{r}
+
+library(GenomicRanges)
+library(GenomicAlignments)
+
+# Convert dataframe of overlapped peaks to GRanges object
+# FOR T CELL PEAKS
+
+# SOSKIC: Get all the MDD peaks overlapped by SNPs. multiple SNPs overlap one peak so remove duplicates
+mdd_peaks_soskic <- makeGRangesFromDataFrame(snps_overl_peaks_soskic_tcell %>% filter(condition=="mdd") %>% select(chr, start, end, condition) %>% arrange(chr, start, end) %>% distinct())
+szs_peaks_soskic <- makeGRangesFromDataFrame(snps_overl_peaks_soskic_tcell %>% filter(condition=="szs") %>% select(chr, start, end, condition) %>% arrange(chr, start, end) %>% distinct())
+mdd_peaks_soskic # 88 peaks
+szs_peaks_soskic # 129 peaks
+
+# BLUEPRINT: 
+mdd_peaks_blueprint <- makeGRangesFromDataFrame(snps_overl_peaks_blueprint_tcell %>% filter(condition=="mdd") %>% select(chr, start, end, condition) %>% arrange(chr, start, end) %>% distinct())
+szs_peaks_blueprint <- makeGRangesFromDataFrame(snps_overl_peaks_blueprint_tcell %>% filter(condition=="szs") %>% select(chr, start, end, condition) %>% arrange(chr, start, end) %>% distinct())
+mdd_peaks_blueprint # 81 peaks
+szs_peaks_blueprint # 132 peaks
+
+# Find the overlaps 
+# Any = overlap by 1 bp. If overlaps more than one range in the other dataset, will count that as separate.
+# Finds which features in the QUERY overlap which features in the SUBJECT.
+# MDD soskic has 88 T-cell specific peaks and MDD blueprint has 81 T-cell specific peaks. So this first one below uses soskic as the reference i.e. subject and gives a count for each of the 81 soskic peaks
+out_mdd_soskic <- GenomicRanges::countOverlaps(query = mdd_peaks_blueprint, subject = mdd_peaks_soskic, type="any")
+out_mdd_blueprint <- GenomicRanges::countOverlaps(query = mdd_peaks_soskic, subject = mdd_peaks_blueprint, type="any")
+out_szs_soskic <- GenomicRanges::countOverlaps(query = szs_peaks_blueprint, subject = szs_peaks_soskic, type="any")
+out_szs_blueprint <- GenomicRanges::countOverlaps(query = szs_peaks_soskic, subject = szs_peaks_blueprint, type="any")
+
+table(out_mdd_blueprint>0)
+table(out_mdd_soskic>0)
+table(out_szs_blueprint>0)
+table(out_szs_soskic>0)
+
+# Generate text for paper:
+sprintf("Many of the Blueprint T-cell specific peaks overlapped by risk SNPs were not overlapped by any of the Soskic dataset T-cell specific peaks overlapped by risk SNPs (%g percent for MDD and %g percent for SZS). Likewise, many of the Soskic T-cell peaks overlapped by risk SNPs were not overlapped by any of the Blueprint T-cell peaks overlapped by risk SNPs (%g percent for MDD and %g percent for SZS). This suggests that the replicable T cell enrichment observed was not driven exclusively by similarities between the specific peaks detected in the different datasets",
+  round(100*sum(out_mdd_blueprint==0)/length(out_mdd_blueprint)),
+  round(100*sum(out_szs_blueprint==0)/length(out_szs_blueprint)),
+  round(100*sum(out_mdd_soskic==0)/length(out_mdd_soskic)),
+  round(100*sum(out_szs_soskic==0)/length(out_szs_soskic))
+)
+```
+
+```{r}
+sessionInfo()
+```
+
+
+

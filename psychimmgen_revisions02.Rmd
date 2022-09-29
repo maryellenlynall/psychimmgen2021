@@ -1,0 +1,297 @@
+---
+title: "BLUEPRINT discordant SNP-peak overlaps"
+output: html_document
+---
+
+Load the BLUEPRINT results
+```{r}
+library(ggplot2)
+library(tidyverse)
+#set_here("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+setwd("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+library(here)
+load(here("res/cheers_blueprint_processed.RData"))
+
+# Load harmonized 1kg data for mdd and szs as processed in revisions_01.Rmd
+load(here("res/harmonised_1kg_mdd_and_szs.RData"))
+```
+
+```{r}
+conditions <- c("Crossdisorder psych"="crossdis","Schizophrenia"="szs","Alzheimer's Disease"="alz","BMI"="bmi","ADHD"="adhd","Depression"="mdd","Bipolar Disorder"="bip","Rheumatoid arthritis"="ra")
+
+# Get SNPs overlapping ALL peaks
+tmp <- list()
+for (i in c("bmi","mdd","crossdis","szs","ra")){
+  print(i)
+  choice <- names(conditions[conditions==i])
+  print(choice)
+  tmp[[i]] <- blueprint_H3K27ac_snps[[choice]] %>% dplyr::select(snp,pos,chr,start,end)
+  tmp[[i]]$condition <- i
+}
+snps_overl_peaks_blueprint <- data.table::rbindlist(tmp)
+head(snps_overl_peaks_blueprint)
+
+# Get SNPs overlapping T cell-specific peaks
+# Include those disorders showing T cell enrichment in blueprint
+
+# Everything defined as 'T cell' on the Blueprint plots
+t_celllist <- c("CD3-positive_CD4-positive_CD8-positive_double_positive_thymocyte","regulatory_T_cell","CD4-positive_alpha-beta_T_cell","central_memory_CD4-positive_alpha-beta_T_cell","effector_memory_CD4-positive_alpha-beta_T_cell","CD8-positive_alpha-beta_T_cell","central_memory_CD8-positive_alpha-beta_T_cell","effector_memory_CD8-positive_alpha-beta_T_cell","effector_memory_CD8-positive_alpha-beta_T_cell_terminally_differentiated")
+
+lynall_get_top_peaks <- function(pValsFile=NULL, uniquePeaksFile=NULL, celllist=NULL){
+  # Function gets top 10% of peaks active in the significantly enriched cell subsets (Bonferroni p<0.05)
+  # Output is vector of peaks
+  pvals <- read.table(pValsFile, sep="\t")
+  library(magrittr)
+  pvals %<>% dplyr::rename(cell_condition=V1,value=V2)
+  print(sprintf("There are %d used cell types as follows:", length(celllist))) 
+  print(celllist)
+  print(uniquePeaksFile)
+  if (length(celllist)==0){
+    return(NA)
+  } else {
+    peaks <- read.table(uniquePeaksFile, sep="\t", header=T, check.names = F)[,c("chr","start","end",celllist)]
+    peaks$peak <- paste(peaks$chr, peaks$start, peaks$end, sep = '_')
+    # For each cell type, convert to percetile ranks (scales 0 --> 1)
+    peaks_rank <- dplyr::mutate(peaks, across(.cols=all_of(celllist), percent_rank))
+    # Keep any peaks with percentile rank >=0.9 in any of the sig cell types
+    peaks_top <- peaks_rank %>% filter_at(vars(all_of(celllist)), .vars_predicate = any_vars(. >= 0.9)) %>% dplyr::arrange(peak)
+  }
+}
+top_peaks <- list()
+for (i in c("bmi","mdd","crossdis","szs","ra")){
+  print(i)
+  top_peaks[[i]] <- lynall_get_top_peaks(pValsFile=here(paste0("res/cheersout_500/",i,"_Blueprint_H3K27ac_disease_enrichment_pValues.txt")), uniquePeaksFile=here(paste0("res/cheersout_500/",i,"_Blueprint_H3K27ac_uniquePeaks.txt")), celllist=t_celllist)
+  top_peaks[[i]]$condition <- i
+}
+head(top_peaks[[2]])
+top_peaks_blueprint_tcell <- data.table::rbindlist(top_peaks) %>% dplyr::select(chr, start, end, condition)
+sample_n(top_peaks_blueprint_tcell,5)
+
+# Now subselect those snps overlapping the top peaks 
+snps_overl_peaks_blueprint_tcell <- left_join(top_peaks_blueprint_tcell, snps_overl_peaks_blueprint, by=c("chr","start","end","condition"))
+sample_n(snps_overl_peaks_blueprint_tcell,10)
+
+```
+
+NB. want PEAK rather than SNP concordance 
+```{r}
+
+snps_overl_peaks_blueprint$peak <- paste(snps_overl_peaks_blueprint$chr, snps_overl_peaks_blueprint$start, snps_overl_peaks_blueprint$end, sep="_")
+
+peaks_blueprint_mdd <- snps_overl_peaks_blueprint %>% filter(condition=="mdd") %>% select(chr, start, end, peak) %>% arrange(chr, start, end) %>% distinct()
+
+peaks_blueprint_szs <- snps_overl_peaks_blueprint %>% filter(condition=="szs") %>% select(chr, start, end, peak) %>% arrange(chr, start, end) %>% distinct()
+
+peaks_blueprint_mdd_only <- dplyr::setdiff(peaks_blueprint_mdd, peaks_blueprint_szs)
+
+peaks_blueprint_szs_only <- dplyr::setdiff(peaks_blueprint_szs, peaks_blueprint_mdd)
+
+peaks_blueprint_both <- dplyr::intersect(peaks_blueprint_szs, peaks_blueprint_mdd)
+
+print(peaks_blueprint_both)
+# chr    start      end
+#1: chr15 90875254 90887918
+#2:  chr7  1966727  1983427
+#3:  chr7  1984544  1990695
+#4:  chr7  1997057  2010891    
+
+# T CELLS
+snps_overl_peaks_blueprint_tcell$peak <- paste(snps_overl_peaks_blueprint_tcell$chr, snps_overl_peaks_blueprint_tcell$start, snps_overl_peaks_blueprint_tcell$end, sep="_")
+
+peaks_blueprint_tcell_mdd <- snps_overl_peaks_blueprint_tcell %>% filter(condition=="mdd") %>% select(chr, start, end, peak) %>% arrange(chr, start, end) %>% distinct()
+
+peaks_blueprint_tcell_szs <- snps_overl_peaks_blueprint_tcell %>% filter(condition=="szs") %>% select(chr, start, end, peak) %>% arrange(chr, start, end) %>% distinct()
+
+peaks_blueprint_tcell_mdd_only <- dplyr::setdiff(peaks_blueprint_tcell_mdd, peaks_blueprint_tcell_szs)
+
+peaks_blueprint_tcell_szs_only <- dplyr::setdiff(peaks_blueprint_tcell_szs, peaks_blueprint_tcell_mdd)
+
+peaks_blueprint_tcell_both <- dplyr::intersect(peaks_blueprint_tcell_szs, peaks_blueprint_tcell_mdd)
+
+print(peaks_blueprint_tcell_both)
+# TWO CONCORDANT PEAKS
+#     chr   start     end
+#1: chr7 1984544 1990695
+#2: chr7 1997057 2010891
+
+```
+
+
+```{r}
+
+# Merge the dataframes, keeping only SNPs that have a hm_odds_ratio and p value for that condition i.e. they also need to appear in harmonised_1kg
+# This retains both the peak location and the SNP position
+rm(snps_all, snps_t)
+snps_all <- inner_join(snps_overl_peaks_blueprint, harmonised_1kg, by=c("condition","snp","chr","pos"))
+snps_t <- inner_join(snps_overl_peaks_blueprint_tcell, harmonised_1kg, by=c("condition","snp","chr","pos"))
+sample_n(snps_t,10)
+
+# Number of peaks in both the cheers overlapping SNPS *and* in harmonized_1kg for the relevant disorder
+# ...active in T cells
+snps_t %>% dplyr::group_by(condition) %>% count 
+# Soskic was mdd 300, szs 620
+# Blueprint is mdd 176, szs 316
+# ...active in all immune cells
+snps_all %>% dplyr::group_by(condition) %>% count 
+# Soskic was mdd 360, szs 730
+# Blueprint is mdd 325, szs 611
+```
+
+PEAK CONCORDANCE (i.e. peaks implicated by both MDD and SZS)
+```{r}
+# All peaks
+snps_all$concordance <- ifelse(snps_all$peak %in% peaks_blueprint_both$peak, "concordant", ifelse(
+  snps_all$peak %in% peaks_blueprint_mdd_only$peak, "mdd", ifelse(
+    snps_all$peak %in% peaks_blueprint_szs_only$peak, "szs", NA
+  )
+))
+table(snps_all$concordance)
+#concordant        mdd        szs 
+#        35        319        582
+
+
+# T cell peaks
+snps_t$concordance <- ifelse(snps_t$peak %in% peaks_blueprint_tcell_both$peak, "concordant", ifelse(
+  snps_t$peak %in% peaks_blueprint_tcell_mdd_only$peak, "mdd", ifelse(
+    snps_t$peak %in% peaks_blueprint_tcell_szs_only$peak, "szs", NA
+  )
+))
+table(snps_t$concordance)
+#concordant        mdd        szs 
+#        27        173        292 
+
+```
+
+
+Now plot the -log10(pvalue) * sign(OR) of the concordant and discordant MDD/SZS peaks 
+1) FOR ALL IMMUNE CELLS
+```{r}
+
+# Plot with x axis as -log10(pvalue) * sign(OR) for MDD and y as -log10(pvalue) * sign(OR) for MDD. Colour by concordance (MDD, SZS, both)
+# Get harmonized snp values for all szs and mdd significant snps overlapping peaks
+tmp_mdd <- harmonised_1kg %>% filter(condition=="mdd" & (snp %in% snps_all$snp))
+tmp_mdd %<>% dplyr::rename(beta_mdd = beta, pval_mdd = pval)
+
+tmp_szs <- harmonised_1kg %>% filter(condition=="szs" & (snp %in% snps_all$snp))
+tmp_szs %<>% dplyr::rename(beta_szs = beta, pval_szs = pval)
+
+# Join szs and mdd - keep snps present in both datasets
+plotdata <- inner_join((tmp_mdd %>% select(snp, chr, pos, ref, alt, beta_mdd, pval_mdd)), (tmp_szs %>% select(snp, chr, pos, ref, alt, beta_szs, pval_szs)),by=c("snp","chr","pos","ref","alt"))
+
+# Add peak information [just use first occurrence i.e. remove duplicate snps as they will overlap same peak whether they are mdd or szs]
+# Show dups
+#tmp_dups <- snps_all[snps_all %>% select(snp) %>% duplicated(),]$snp 
+#snps_all[snps_all$snp %in% tmp_dups,]
+# Keep only distinct rows
+tmp_peaks <- snps_all %>% distinct(snp, .keep_all=T) %>% select(snp,pos,chr,ref,alt,peak,concordance)
+plotdata <- left_join(plotdata, tmp_peaks, by=c("snp","chr","pos","ref","alt"))
+
+p <- ggplot(plotdata, aes(x = -log10(pval_mdd)*sign(beta_mdd), y = -log10(pval_szs)*sign(beta_szs), color=concordance)) + 
+  geom_point(shape=16, size=1, alpha=0.6) + 
+  coord_equal() + 
+  theme_bw() + theme(panel.grid.major=element_blank(), panel.grid.minor=element_blank()) + 
+  # Need two lines as an aesthetic if want legend
+  geom_hline(aes(yintercept = c(-log10(5e-8)), linetype="p=5e-8"), color="dark red") + geom_hline(aes(yintercept = c(-log10(0.05)), linetype="p=0.05"), color="dark red") + 
+  # Then make the rest of the horizontal and vertical lines to match
+  geom_hline(yintercept = log10(5e-8), linetype="dashed", color="dark red") + geom_hline(yintercept = log10(0.05), linetype="dotted", color="dark red") + 
+  geom_vline(xintercept = c(-log10(5e-8), log10(5e-8)), linetype="dashed", color="dark red") + geom_vline(xintercept = c(-log10(0.05), log10(0.05)), linetype="dotted", color="dark red") + 
+  geom_vline(xintercept = 0, color="black") + 
+  geom_hline(yintercept = 0, color="black") + 
+  expand_limits(x=c(-27,27), y=c(-27,27)) + 
+  xlab(expression(paste("MDD GWAS: -",log[10](`p-value`)%*%sign(beta)))) + 
+  ylab(expression(paste("SZS GWAS: -",log[10](`p-value`)%*%sign(beta)))) + 
+  scale_linetype_manual(limits=c("p=5e-8","p=0.05"), values=c("dashed","dotted")) + 
+  scale_color_manual(values=c("dark red","orange","darkcyan")) + 
+  guides(colour = guide_legend(override.aes = list(size=2)))
+p 
+
+ggsave("revisions_snps_overlapping_peaks_allimmune_mdd_vs_szs_concordance_blueprint.pdf", path=here("pics"), width=8, height=5)
+
+# View table of the concordant peaks - note opposite direction of effect for many SNPs overlapping concordant peaks!
+plotdata %>% filter(concordance=="concordant") %>% select(snp, peak, beta_mdd, beta_szs, pval_mdd, pval_szs) 
+```
+
+Now plot the -log10(pvalue) * sign(OR) of the concordant and discordant MDD/SZS peaks
+2) FOR T CELL PEAK OVERLAPS ONLY
+```{r}
+# Plot with x axis as -log10(pvalue) * sign(OR) for MDD and y as -log10(pvalue) * sign(OR) for MDD. Colour by concordance (MDD, SZS, both)
+# Get harmonized snp values for all szs and mdd significant snps overlapping peaks
+tmp_mdd <- harmonised_1kg %>% filter(condition=="mdd" & (snp %in% snps_t$snp))
+tmp_mdd %<>% dplyr::rename(beta_mdd = beta, pval_mdd = pval)
+
+tmp_szs <- harmonised_1kg %>% filter(condition=="szs" & (snp %in% snps_t$snp))
+tmp_szs %<>% dplyr::rename(beta_szs = beta, pval_szs = pval)
+
+# Join szs and mdd - keep snps present in both datasets
+plotdata_t <- inner_join((tmp_mdd %>% select(snp, chr, pos, ref, alt, beta_mdd, pval_mdd)), (tmp_szs %>% select(snp, chr, pos, ref, alt, beta_szs, pval_szs)),by=c("snp","chr","pos","ref","alt"))
+
+# Add peak information [just use first occurrence i.e. remove duplicate snps as they will overlap same peak whether they are mdd or szs]
+# Show dups
+#tmp_dups <- snps_all[snps_all %>% select(snp) %>% duplicated(),]$snp 
+#snps_all[snps_all$snp %in% tmp_dups,]
+# Keep only distinct rows
+tmp_peaks <- snps_t %>% distinct(snp, .keep_all=T) %>% select(snp,pos,chr,ref,alt,peak,concordance)
+plotdata_t <- left_join(plotdata_t, tmp_peaks, by=c("snp","chr","pos","ref","alt"))
+
+p <- ggplot(plotdata_t, aes(x = -log10(pval_mdd)*sign(beta_mdd), y = -log10(pval_szs)*sign(beta_szs), color=concordance)) + 
+  geom_point(shape=16, size=1, alpha=0.6) + 
+  coord_equal() + 
+  theme_bw() + theme(panel.grid.major=element_blank(), panel.grid.minor=element_blank()) + 
+  # Need two lines as an aesthetic if want legend
+  geom_hline(aes(yintercept = c(-log10(5e-8)), linetype="p=5e-8"), color="dark red") + geom_hline(aes(yintercept = c(-log10(0.05)), linetype="p=0.05"), color="dark red") + 
+  # Then make the rest of the horizontal and vertical lines to match
+  geom_hline(yintercept = log10(5e-8), linetype="dashed", color="dark red") + geom_hline(yintercept = log10(0.05), linetype="dotted", color="dark red") + 
+  geom_vline(xintercept = c(-log10(5e-8), log10(5e-8)), linetype="dashed", color="dark red") + geom_vline(xintercept = c(-log10(0.05), log10(0.05)), linetype="dotted", color="dark red") + 
+  geom_vline(xintercept = 0, color="black") + 
+  geom_hline(yintercept = 0, color="black") + 
+  expand_limits(x=c(-27,27), y=c(-27,27)) + 
+  xlab(expression(paste("MDD GWAS: -",log[10](`p-value`)%*%sign(beta)))) + 
+  ylab(expression(paste("SZS GWAS: -",log[10](`p-value`)%*%sign(beta)))) + 
+  scale_linetype_manual(limits=c("p=5e-8","p=0.05"), values=c("dashed","dotted")) + 
+  scale_color_manual(values=c("dark red","orange","darkcyan")) + 
+  guides(colour = guide_legend(override.aes = list(size=2)))
+p 
+
+ggsave("revisions_snps_overlapping_peaks_tcell_mdd_vs_szs_concordance_blueprint.pdf", path=here("pics"), width=8, height=5)
+
+# View table of the concordant peaks - note opposite direction of effect for many SNPs overlapping concordant peaks!
+plotdata_t %>% filter(concordance=="concordant") %>% select(snp, peak, beta_mdd, beta_szs, pval_mdd, pval_szs) 
+```
+
+Generate text for manuscript
+```{r}
+# T CELLS
+
+head(plotdata_t)
+# Select only those with p<5e-8 
+tmp1 <- plotdata_t %>% filter(concordance=="mdd") %>% filter(pval_mdd<5e-8)
+# Now subselect those which are same direction and nominally significant for SZS
+tmp1_nom <- tmp1 %>% filter(sign(beta_mdd)==sign(beta_szs)) %>% filter(pval_szs<0.05)
+tmp1_oppodir <- tmp1 %>% filter(-sign(beta_mdd)==sign(beta_szs))
+
+tmp2 <- plotdata_t %>% filter(concordance=="szs") %>% filter(pval_szs<5e-8)
+# Now subselect those which are same direction and nominally significant for SZS
+tmp2_nom <- tmp2 %>% filter(sign(beta_mdd)==sign(beta_szs)) %>% filter(pval_mdd<0.05)
+tmp2_oppodir <- tmp2 %>% filter(-sign(beta_mdd)==sign(beta_szs))
+
+print(sprintf("For the T cell peaks only overlapped by MDD SNPs, only %g percent of the %d MDD SNPs with disease association p<5e-8 were significant for the SZS GWAS at the nominal level of p<0.05 and with the same direction of disease association, and %g percent of the SNPs had an opposite direction of association with SZS compared to MDD", round(100*nrow(tmp1_nom)/nrow(tmp1)), nrow(tmp1), round(100*nrow(tmp1_oppodir)/nrow(tmp1))))
+# BLUEPRINT: "For the T cell peaks only overlapped by MDD SNPs, only 31 percent of the 119 MDD SNPs with disease association p<5e-8 were significant for the SZS GWAS at the nominal level of p<0.05 and with the same direction of disease association, and 22 percent of the SNPs had an opposite direction of association with SZS compared to MDD"
+
+print(sprintf("For the T cell peaks only overlapped by SZS SNPs, only %g percent of the %d such SNPs were nominally significant and with the same direction of effect in MDD, and %g percent of the SNPs had an opposite direction of association with SZS compared to MDD", round(100*nrow(tmp2_nom)/nrow(tmp2)), nrow(tmp2), round(100*nrow(tmp2_oppodir)/nrow(tmp2))))
+# BLUEPRINT: "For the T cell peaks only overlapped by SZS SNPs, only 43 percent of the 218 such SNPs were nominally significant and with the same direction of effect in MDD, and 24 percent of the SNPs had an opposite direction of association with SZS compared to MDD"
+
+# Shorter summary version including both:
+print(sprintf("For the MDD-SZS discordant T cell peaks, only %g percent of the %d SNP-peak overlaps with disease association p<5e-8 were significant with the same direction of effect at the nominal level of p<0.05 in the discordant disorder, and %g percent of the SNP-peak overlaps had an opposite direction of association in the discordant disorder", 
+              round(100*( (nrow(tmp1_nom)+nrow(tmp2_nom)) / (nrow(tmp1)+nrow(tmp2)) )),
+                    nrow(tmp1)+nrow(tmp2), 
+                    round(100*( (nrow(tmp1_oppodir)+nrow(tmp2_oppodir)) / (nrow(tmp1)+nrow(tmp2)))) ))
+# BLUEPRINT: "For the MDD-SZS discordant T cell peaks, only 39 percent of the 337 SNP-peak overlaps with disease association p<5e-8 were significant with the same direction of effect at the nominal level of p<0.05 in the discordant disorder, and 23 percent of the SNP-peak overlaps had an opposite direction of association in the discordant disorder"
+
+```
+
+Save the snp peak overlaps with information about MDD-SZS concordance
+```{r}
+
+save(snps_overl_peaks_blueprint, snps_overl_peaks_blueprint_tcell, file = here("res/discordant_peaks_blueprint.RData"))
+
+```

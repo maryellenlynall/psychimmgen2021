@@ -1,0 +1,371 @@
+---
+title: "Features of the discordant peaks"
+output: html_document
+---
+
+```{r}
+
+library(ggplot2)
+library(tidyverse)
+library(magrittr)
+#set_here("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+setwd("/Users/mary/non_dropbox/exps/exp059_snp_to_sc/")
+library(here)
+load(here("res/discordant_peaks_soskic.RData"))
+load(here("res/discordant_peaks_blueprint.RData"))
+
+```
+
+Generate granges objects for discordant peaks
+NB. Discordant peaks is different from discordant SNPs
+```{r}
+# Select peaks
+peaks_soskic_tcell_mdd <- snps_overl_peaks_soskic_tcell %>% filter(condition=="mdd") %>% select(chr, start, end) %>% arrange(chr, start, end) %>% distinct()
+
+peaks_soskic_tcell_szs <- snps_overl_peaks_soskic_tcell %>% filter(condition=="szs") %>% select(chr, start, end) %>% arrange(chr, start, end) %>% distinct()
+
+peaks_blueprint_tcell_mdd <- snps_overl_peaks_blueprint_tcell %>% filter(condition=="mdd") %>% select(chr, start, end) %>% arrange(chr, start, end) %>% distinct()
+
+peaks_blueprint_tcell_szs <- snps_overl_peaks_blueprint_tcell %>% filter(condition=="szs") %>% select(chr, start, end) %>% arrange(chr, start, end) %>% distinct()
+
+# Subset to discordant and make a GRanges object
+library(GenomicRanges)
+peaks_soskic_tcell_mdd_only <- makeGRangesFromDataFrame(dplyr::setdiff(peaks_soskic_tcell_mdd, peaks_soskic_tcell_szs))
+
+peaks_soskic_tcell_szs_only <- makeGRangesFromDataFrame(dplyr::setdiff(peaks_soskic_tcell_szs, peaks_soskic_tcell_mdd))
+
+peaks_soskic_tcell_both <- makeGRangesFromDataFrame(dplyr::intersect(peaks_soskic_tcell_szs, peaks_soskic_tcell_mdd))
+#      seqnames              ranges strand
+#         <Rle>           <IRanges>  <Rle>
+#  [1]    chr14 103606438-103608584      *
+#  [2]    chr15   90735800-90888696      *
+#  [3]     chr7     1981905-1990800      *
+
+peaks_blueprint_tcell_mdd_only <- makeGRangesFromDataFrame(dplyr::setdiff(peaks_blueprint_tcell_mdd, peaks_blueprint_tcell_szs))
+
+peaks_blueprint_tcell_szs_only <- makeGRangesFromDataFrame(dplyr::setdiff(peaks_blueprint_tcell_szs, peaks_blueprint_tcell_mdd))
+
+peaks_blueprint_tcell_both <- makeGRangesFromDataFrame(dplyr::intersect(peaks_blueprint_tcell_szs, peaks_blueprint_tcell_mdd))
+#      seqnames          ranges strand
+#         <Rle>       <IRanges>  <Rle>
+#  [1]     chr7 1984544-1990695      *
+#  [2]     chr7 1997057-2010891      *
+
+
+```
+
+
+```{r}
+# For blueprint, two concordant T cell specific peaks
+length(peaks_blueprint_tcell_both)
+nrow(peaks_blueprint_tcell_mdd)
+length(peaks_blueprint_tcell_mdd_only)
+nrow(peaks_blueprint_tcell_szs)
+length(peaks_blueprint_tcell_szs_only)
+
+# Total blueprint peaks:
+length(peaks_blueprint_tcell_both) + length(peaks_blueprint_tcell_mdd_only) + length(peaks_blueprint_tcell_szs_only)
+# 211
+
+# For Soskic, 3 concordant T cell specific peaks
+length(peaks_soskic_tcell_both)
+nrow(peaks_soskic_tcell_mdd)
+length(peaks_soskic_tcell_mdd_only)
+nrow(peaks_soskic_tcell_szs)
+length(peaks_soskic_tcell_szs_only)
+
+# Total soskic peaks:
+length(peaks_soskic_tcell_both) + length(peaks_soskic_tcell_mdd_only) + length(peaks_soskic_tcell_szs_only)
+# 214
+
+```
+
+What are the differences in nearest genes (using same definition as my GSEA)? Very few shared peaks, so let's look at those
+```{r}
+
+source(here("workflow/shortforgithub/functions/lynall_seq2gene.R"))
+
+# Very important to load TxDb or seq2gene defaults to hg19
+library(org.Hs.eg.db)
+library(EnsDb.Hsapiens.v86) 
+edb <- EnsDb.Hsapiens.v86
+genomeStyles()$Homo_sapiens
+seqlevelsStyle(edb) <- "UCSC"
+
+# All MDD soskic peaks - 65 genes identified
+soskic_tcell_mdd <- lynall_seq2gene(makeGRangesFromDataFrame(peaks_soskic_tcell_mdd), tssRegion = c(-3000, 3000), flankDistance = 10000, TxDb=edb, sameStrand = FALSE)
+# All SZS soskic peaks - 100 genes identified
+soskic_tcell_szs <- lynall_seq2gene(makeGRangesFromDataFrame(peaks_soskic_tcell_szs), tssRegion = c(-3000, 3000), flankDistance = 10000, TxDb=edb, sameStrand = FALSE)
+
+# Gene overlap
+tmp <- intersect(soskic_tcell_mdd$full_dataframe$gene, soskic_tcell_szs$full_dataframe$gene)
+# "ENSG00000256053" "ENSG00000256500" "ENSG00000140564" "ENSG00000200677" "ENSG00000002822"
+# NO, OLD VERSIONS select(org.Hs.eg.db, tmp, c("SYMBOL","GENENAME"), "ENSEMBL")
+print(mapIds(x = edb, keys = tmp, column = "SYMBOL", keytype = "GENEID"))
+#ENSG00000256053 ENSG00000256500 ENSG00000140564 ENSG00000200677 ENSG00000002822 
+#       "APOPT1"  "RP11-73M18.2"         "FURIN"       "SNORD18"        "MAD1L1" 
+
+# Check on symbol intersection - also gives COA8 as overlap - that's because COA8 = APOPT1 
+intersect(soskic_tcell_mdd$full_dataframe$symbol, soskic_tcell_szs$full_dataframe$symbol)
+soskic_tcell_mdd$full_dataframe %>% dplyr::filter(symbol=="COA8")
+soskic_tcell_szs$full_dataframe %>% dplyr::filter(symbol=="COA8")
+# ----------------------------
+
+# All MDD blueprint peaks - 50 genes
+blueprint_tcell_mdd <- lynall_seq2gene(makeGRangesFromDataFrame(peaks_blueprint_tcell_mdd), tssRegion = c(-3000, 3000), flankDistance = 10000, TxDb=edb, sameStrand = FALSE)
+# All SZS blueprint peaks - 84 genes
+blueprint_tcell_szs <- lynall_seq2gene(makeGRangesFromDataFrame(peaks_blueprint_tcell_szs), tssRegion = c(-3000, 3000), flankDistance = 10000, TxDb=edb, sameStrand = FALSE)
+# Gene overlap
+tmp <- intersect(blueprint_tcell_mdd$full_dataframe$gene, blueprint_tcell_szs$full_dataframe$gene)
+print(mapIds(x = edb, keys = tmp, column = "SYMBOL", keytype = "GENEID"))
+#ENSG00000256053 ENSG00000002822 
+#       "APOPT1"        "MAD1L1" 
+
+
+```
+
+
+And get the discordant peaks
+```{r}
+
+# MDD only Soskic peaks
+soskic_tcell_mdd_only <- lynall_seq2gene(peaks_soskic_tcell_mdd_only, tssRegion = c(-3000, 3000), flankDistance = 10000, TxDb=edb, sameStrand = FALSE)
+# "61 unique genes identified"
+
+# SZS only Soskic peaks
+soskic_tcell_szs_only <- lynall_seq2gene(peaks_soskic_tcell_szs_only, tssRegion = c(-3000, 3000), flankDistance = 10000, TxDb=edb, sameStrand = FALSE)
+# "98 unique genes identified"
+
+# MDD only Blueprint peaks
+blueprint_tcell_mdd_only <- lynall_seq2gene(peaks_blueprint_tcell_mdd_only, tssRegion = c(-3000, 3000), flankDistance = 10000, TxDb=edb, sameStrand = FALSE)
+# "50 unique genes identified"
+
+# SZS only Soskic peaks
+blueprint_tcell_szs_only <- lynall_seq2gene(peaks_blueprint_tcell_szs_only, tssRegion = c(-3000, 3000), flankDistance = 10000, TxDb=edb, sameStrand = FALSE)
+# "83 unique genes identified"
+
+```
+
+What are the differences in distance to nearest TSS for the MDD vs SZS peaks?
+```{r}
+# Lets compare median distance to TSS for the MDD-only and the SZS-only peaks
+
+# Strikingly similar proportion are not in promoter region vs. overlapping or flanking promoter
+as.data.frame(blueprint_tcell_mdd_only$nearest_tss) %>% group_by(overlap_type) %>% summarize(count=n()) %>% mutate(perc=100*round(count/sum(count),3)) # 57% none
+
+as.data.frame(blueprint_tcell_szs_only$nearest_tss) %>% group_by(overlap_type) %>% summarize(count=n()) %>% mutate(perc=100*round(count/sum(count),3)) # 61% none
+
+as.data.frame(soskic_tcell_mdd_only$nearest_tss) %>% group_by(overlap_type) %>% summarize(count=n()) %>% mutate(perc=100*round(count/sum(count),3)) # 52% none
+
+as.data.frame(soskic_tcell_szs_only$nearest_tss) %>% group_by(overlap_type) %>% summarize(count=n()) %>% mutate(perc=100*round(count/sum(count),3)) # 49% none
+
+# Median distance to TSS
+b_mdd_tss <- median(abs(blueprint_tcell_mdd_only$nearest_tss$distance), na.rm=T)
+b_szs_tss <- median(abs(blueprint_tcell_szs_only$nearest_tss$distance), na.rm=T)
+s_mdd_tss <- median(abs(soskic_tcell_mdd_only$nearest_tss$distance), na.rm=T)
+s_szs_tss <- median(abs(soskic_tcell_szs_only$nearest_tss$distance), na.rm=T)
+```
+
+
+Question - what are the differences in the regulatory elements identified by the discordant SNP-peak overlaps?
+```{r}
+# Do for both BLUEPRINT and Soskic SZS-MDD discordant sites
+# Is there an easy way to go from SNP to annotated regulatory element?
+# Could use the T cell IDEAS annotations from part 1, lifted over, then countOverlaps?
+
+# Import the zipped bed files for T cells
+load(here("data/raw/roadmap/roadmap_sample_info_tidy.Rdata"))
+roadmap_names %>% dplyr::filter(group=="Immune") %>% dplyr::select(EID, name)
+# Going to use the most generic one i.e. E034                          Primary T cells from peripheral blood
+
+library(rtracklayer)
+# STRAIGHT PERIPHERAL T CELLS for BLUEPRINT
+# Non-genic enhancers
+enhancers <- rtracklayer::import(con="/Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/tmp/ENCODE/IDEAS/E034.4_Enh.bed.gz", format="bed", genome="hg19")
+# Genic enhancers
+genicenhancers <- rtracklayer::import(con="/Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/tmp/ENCODE/IDEAS/E034.genicenhancer.bed.gz", format="bed", genome="hg19")
+# Promoters
+promoters <- rtracklayer::import(con="/Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/tmp/ENCODE/IDEAS/E034.promoter.bed.gz", format="bed", genome="hg19")
+
+# STIMULATED CD4 CELLS for SOSKIC ("Primary T helper cells PMA-I stimulated"), E043
+# Non-genic enhancers
+cd4stim_enhancers <- rtracklayer::import(con="/Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/tmp/ENCODE/IDEAS/E043.4_Enh.bed.gz", format="bed", genome="hg19")
+# Genic enhancers
+cd4stim_genicenhancers <- rtracklayer::import(con="/Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/tmp/ENCODE/IDEAS/E043.genicenhancer.bed.gz", format="bed", genome="hg19")
+# Promoters
+cd4stim_promoters <- rtracklayer::import(con="/Users/mary/non_dropbox/exps/exp059_snp_to_sc/data/tmp/ENCODE/IDEAS/E043.promoter.bed.gz", format="bed", genome="hg19")
+
+enhancers # 86k ranges
+genicenhancers # 86k ranges
+promoters # 47k ranges
+
+cd4stim_enhancers # 104k ranges
+cd4stim_genicenhancers # 89k ranges
+cd4stim_promoters # 48k ranges
+
+# Liftover
+library(AnnotationHub)
+ahub <- AnnotationHub()
+chainfiles <- query(ahub, c("hg38", "hg19", "chainfile"))
+chainfiles # Okay we are interested in this one: AH14150 | hg19ToHg38.over.chain.gz
+chain <- chainfiles[['AH14150']]
+chain
+enhancers_gr38 <- unlist(liftOver(enhancers, chain))
+genicenhancers_gr38 <- unlist(liftOver(genicenhancers, chain))
+promoters_gr38 <- unlist(liftOver(promoters, chain))
+cd4stim_enhancers_gr38 <- unlist(liftOver(cd4stim_enhancers, chain))
+cd4stim_genicenhancers_gr38 <- unlist(liftOver(cd4stim_genicenhancers, chain))
+cd4stim_promoters_gr38 <- unlist(liftOver(cd4stim_promoters, chain))
+
+```
+
+
+```{r}
+# Now look at the types of regulatory element overlapped
+# Want to get % of peaks overlapping nongenicenhancers, promoters, genicenhancers
+# MDD blueprint enhancers with straight T cells
+b_mdd_e_num <- sum(countOverlaps(peaks_blueprint_tcell_mdd_only, enhancers_gr38)>0)
+b_mdd_e <- round(100*(b_mdd_e_num)/
+length(peaks_blueprint_tcell_mdd_only),0)
+
+# MDD blueprint genicenhancers
+b_mdd_ge_num <- sum(countOverlaps(peaks_blueprint_tcell_mdd_only, genicenhancers_gr38)>0)
+b_mdd_ge <- round(100*(b_mdd_ge_num)/
+length(peaks_blueprint_tcell_mdd_only),0)
+
+# MDD blueprint promoters
+b_mdd_p_num <- sum(countOverlaps(peaks_blueprint_tcell_mdd_only, promoters_gr38)>0)
+b_mdd_p <- round(100*(b_mdd_p_num)/
+length(peaks_blueprint_tcell_mdd_only),0)
+
+# SZS blueprint enhancers with straight T cells
+b_szs_e_num <- sum(countOverlaps(peaks_blueprint_tcell_szs_only, enhancers_gr38)>0)
+b_szs_e <-round(100*(b_szs_e_num)/
+length(peaks_blueprint_tcell_szs_only),0)
+
+# SZS blueprint genicenhancers
+b_szs_ge_num <- sum(countOverlaps(peaks_blueprint_tcell_szs_only, genicenhancers_gr38)>0)
+b_szs_ge <- round(100*(b_szs_ge_num)/
+length(peaks_blueprint_tcell_szs_only),0)
+
+# SZS blueprint promoters
+b_szs_p_num <- sum(countOverlaps(peaks_blueprint_tcell_szs_only, promoters_gr38)>0)
+b_szs_p <- round(100*(b_szs_p_num)/
+length(peaks_blueprint_tcell_szs_only),0)
+
+# ---- NOW SOSKIC ----
+
+# MDD soskic enhancers with stimulated CD4+ T cells
+s_mdd_e_num <- sum(countOverlaps(peaks_soskic_tcell_mdd_only, cd4stim_enhancers_gr38)>0)
+s_mdd_e <- round(100*(s_mdd_e_num)/
+length(peaks_soskic_tcell_mdd_only),0)
+
+# MDD soskic genicenhancers
+s_mdd_ge_num <- sum(countOverlaps(peaks_soskic_tcell_mdd_only, cd4stim_genicenhancers_gr38)>0)
+s_mdd_ge <- round(100*(s_mdd_ge_num)/
+length(peaks_soskic_tcell_mdd_only),0)
+
+# MDD soskic promoters
+s_mdd_p_num <- sum(countOverlaps(peaks_soskic_tcell_mdd_only, cd4stim_promoters_gr38)>0)
+s_mdd_p <- round(100*(s_mdd_p_num)/
+length(peaks_soskic_tcell_mdd_only),0)
+
+# SZS soskic enhancers with stimulated CD4+ T cells
+s_szs_e_num <- sum(countOverlaps(peaks_soskic_tcell_szs_only, cd4stim_enhancers_gr38)>0)
+s_szs_e <- round(100*(s_szs_e_num)/
+length(peaks_soskic_tcell_szs_only),0)
+
+# SZS soskic genicenhancers
+s_szs_ge_num <- sum(countOverlaps(peaks_soskic_tcell_szs_only, cd4stim_genicenhancers_gr38)>0)
+s_szs_ge <- round(100*(s_szs_ge_num)/
+length(peaks_soskic_tcell_szs_only),0)
+
+# SZS soskic promoters
+s_szs_p_num <- sum(countOverlaps(peaks_soskic_tcell_szs_only, cd4stim_promoters_gr38)>0)
+s_szs_p <- round(100*(s_szs_p_num)/
+length(peaks_soskic_tcell_szs_only),0)
+
+# STATISTICS
+# Can't do chi squared for overlaps with type of regulatory element as violates assumption that annotations are exclusive. Do chisq for each element separately (overlapping vs. not)
+# I.e. almost no overlap in peaks, but very similar overlap with types of regulatory elements
+
+# STATS FOR BLUEPRINT
+chi_b_prom <- chisq.test(x=matrix(data=c(b_mdd_p_num,                       length(peaks_blueprint_tcell_mdd_only)-b_mdd_p_num, 
+ b_szs_p_num, 
+ length(peaks_blueprint_tcell_szs_only)-b_szs_p), nrow=2))
+print(chi_b_prom) # not sig
+
+chi_b_e <- chisq.test(x=matrix(data=c(b_mdd_e_num,                       length(peaks_blueprint_tcell_mdd_only)-b_mdd_e_num, 
+ b_szs_e_num, 
+ length(peaks_blueprint_tcell_szs_only)-b_szs_e), nrow=2))
+print(chi_b_e) # not sig
+
+chi_b_ge <- chisq.test(x=matrix(data=c(b_mdd_ge_num,                       length(peaks_blueprint_tcell_mdd_only)-b_mdd_ge_num, 
+ b_szs_ge_num, 
+ length(peaks_blueprint_tcell_szs_only)-b_szs_ge), nrow=2))
+print(chi_b_ge) # p=0.04
+
+wilcox_b_tss <- wilcox.test(abs(blueprint_tcell_mdd_only$nearest_tss$distance), abs(blueprint_tcell_szs_only$nearest_tss$distance))
+print(wilcox_b_tss) # not sig
+
+# STATS FOR SOSKIC
+chi_s_prom <- chisq.test(x=matrix(data=c(s_mdd_p_num,                       length(peaks_soskic_tcell_mdd_only)-s_mdd_p_num, 
+ s_szs_p_num, 
+ length(peaks_soskic_tcell_szs_only)-s_szs_p), nrow=2))
+print(chi_s_prom) # not sig
+
+chi_s_e <- chisq.test(x=matrix(data=c(s_mdd_e_num,                       length(peaks_soskic_tcell_mdd_only)-s_mdd_e_num, 
+ s_szs_e_num, 
+ length(peaks_soskic_tcell_szs_only)-s_szs_e), nrow=2))
+print(chi_s_e) # not sig
+
+chi_s_ge <- chisq.test(x=matrix(data=c(s_mdd_ge_num,                       length(peaks_soskic_tcell_mdd_only)-s_mdd_ge_num, 
+ s_szs_ge_num, 
+ length(peaks_soskic_tcell_szs_only)-s_szs_ge), nrow=2))
+print(chi_s_ge) # p=0.5
+
+wilcox_s_tss <- wilcox.test(abs(soskic_tcell_mdd_only$nearest_tss$distance), abs(soskic_tcell_szs_only$nearest_tss$distance))
+print(wilcox_s_tss) # not sig
+
+```
+
+```{r}
+# Make pretty tables and adjusted p values column
+suptab_b <- data.frame(mdd=c(b_mdd_e, b_mdd_ge, b_mdd_p, b_mdd_tss), szs=c(b_szs_e, b_szs_ge, b_szs_p, b_szs_tss), pval=as.numeric(c(chi_b_e$p.value, chi_b_ge$p.value, chi_b_prom$p.value, wilcox_b_tss$p.value)), row.names = c("Overlap with T cell \nnon-genic enhancers","Overlap with T cell\ngenic enhancers","Overlap with T cell\npromoters","Distance to nearest\nTSS (median)"))
+suptab_b$p.adjust <- p.adjust(suptab_b$pval, method="BH")
+str(suptab_b)
+suptab_b$pval %<>% signif(1)
+suptab_b$p.adjust %<>% signif(1)
+suptab_b
+
+suptab_s <- data.frame(mdd=c(s_mdd_e, s_mdd_ge, s_mdd_p, s_mdd_tss), szs=c(s_szs_e, s_szs_ge, s_szs_p, s_szs_tss), pval=as.numeric(c(chi_s_e$p.value, chi_s_ge$p.value, chi_s_prom$p.value, wilcox_s_tss$p.value)), row.names = c("Overlap with stimulated\nT cell non-genic enhancers","Overlap with stimulated\nT cell genic enhancers","Overlap with stimulated\nT cell promoters","Distance to nearest\nTSS (median)"))
+suptab_s$p.adjust <- p.adjust(suptab_s$pval, method="BH")
+suptab_s$pval %<>% signif(1)
+suptab_s$p.adjust %<>% signif(1)
+suptab_s
+
+# Add %
+suptab_b %<>% mutate(across(c(mdd, szs),~paste0(.,"%")))
+suptab_s %<>% mutate(across(c(mdd, szs),~paste0(.,"%")))
+
+# Last row needs to be bp not %
+suptab_b[rownames(suptab_b)=="Distance to nearest\nTSS (median)",] <- gsub("%"," bp", suptab_b[rownames(suptab_b)=="Distance to nearest\nTSS (median)",])
+suptab_s[rownames(suptab_s)=="Distance to nearest\nTSS (median)",] <- gsub("%"," bp", suptab_s[rownames(suptab_s)=="Distance to nearest\nTSS (median)",])
+
+
+# Print
+library(kableExtra)
+suptab_b %>% kable(row.names = T, col.names=c("MDD peaks\n(Blueprint T cells)","SZS peaks\n(Blueprint T cells)", "P value", "P (FDR-corrected)")) %>% kable_styling(bootstrap_options = "striped", full_width = FALSE)
+
+suptab_s %>% kable(row.names = T, col.names=c("MDD peaks\n(Soskic T cells)","SZS peaks\n(Soskic T cells)","P value",  "P (FDR-corrected)")) %>% kable_styling(bootstrap_options = "striped", full_width = FALSE)
+
+```
+
+```{r}
+
+sessionInfo()
+
+```
+
+
+
