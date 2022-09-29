@@ -4,6 +4,8 @@ Code to accompany paper:
 Lynall et al. Nature Communications 2022 
 Genetic variants associated with psychiatric disorders are enriched at epigenetically active sites in lymphoid cells
 
+Version of code used to generate paper is archived at [![DOI](https://zenodo.org/badge/392003372.svg)](https://zenodo.org/badge/latestdoi/392003372)
+
 ## Datasets generated
 
 Partitioned LD scores for active regulatory regions for ROADMAP epigenomics tissues are available on Zenodo [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5153661.svg)](https://doi.org/10.5281/zenodo.5153661)
