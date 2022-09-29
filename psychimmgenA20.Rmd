@@ -91,11 +91,36 @@ library(ggrepel)
 ggplot(forcor, aes(x=h2_z, y=zscore, label=condition_pretty)) + geom_point() + geom_text_repel(size=3) + geom_smooth(method = "lm", se=FALSE) + theme_bw() + xlab("SNP heritability z-score") + ylab("s-LDSC z-score") + facet_wrap(~cell, ncol=1) + expand_limits(y=c(-3, 11.5))
 ggsave(filename = here("pics/h2z_vs_sldscz.pdf"),width=3.5,height=9.5)
 
-cor.test(~ zscore + h2_z, data=forcor %>% dplyr::filter(cell=="Fetal brain (male)"), method="spearman") # rho=0.87, p=0.005 
+# For bootstrapped confidence levels for Spearman's rho
+library(RVAideMemoire)
+# df = n-2 
 
-cor.test(~ zscore + h2_z, data=forcor %>% dplyr::filter(cell=="Fetal brain (female)"), method="spearman") # rho=0.87, p=0.005 [i.e. same]
+data <- forcor %>% dplyr::filter(cell=="Fetal brain (male)")
+out <- cor.test(data$zscore, data$h2_z, method="spearman")
+# S(7)=16, rho=0.87, p=0.005 
+spearman.ci(data$zscore, data$h2_z, nrep=10000, conf.level=0.95)
+# 95 percent confidence interval:
+# 0.3504274 1.0000000
 
-cor.test(~ zscore + h2_z, data=forcor %>% dplyr::filter(cell=="T cytotoxic naive cells (peripheral blood)"), method="spearman") # rho=0, p=1
+data <- forcor %>% dplyr::filter(cell=="Fetal brain (female)")
+cor.test(data$zscore, data$h2_z, method="spearman") 
+# S=16, rho=0.87, p=0.005 [i.e. same]
+spearman.ci(data$zscore, data$h2_z, nrep=10000, conf.level=0.95)
+# 95 percent confidence interval:
+# 0.3504274 1.0000000
 
-cor.test(~ zscore + h2_z, data=forcor %>% dplyr::filter(cell=="T helper naive cells (peripheral blood)"), method="spearman") # rho=0.03, p=0.9
+data <- forcor %>% dplyr::filter(cell=="T cytotoxic naive cells (peripheral blood)")
+cor.test(data$zscore, data$h2_z, method="spearman") 
+# S=120, rho=0, p=1
+spearman.ci(data$zscore, data$h2_z, nrep=10000, conf.level=0.95)
+# 95 percent confidence interval:
+# -0.7391304  0.7297297
+
+data <- forcor %>% dplyr::filter(cell=="T helper naive cells (peripheral blood)")
+cor.test(data$zscore, data$h2_z, method="spearman") 
+# S=116, rho=0.03, p=0.9
+spearman.ci(data$zscore, data$h2_z, nrep=10000, conf.level=0.95)
+# 95 percent confidence interval:
+# -0.8596491  0.8434783
+
 ```
