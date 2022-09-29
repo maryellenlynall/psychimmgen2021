@@ -106,7 +106,7 @@ fct_reorg <- function(fac, ...) {
 }
 res_immune$condition %<>% fct_reorg("Cross-disorder psych"="xdiss","Schizophrenia"="szs", "Bipolar disorder"="bip", "Depression"="mdd","Autism"="asd","ADHD"="adhd","BMI"="bmi","Alzheimer's"="alz","Rheumatoid arthritis"="ra")
 
-# Switche to ordering by groups of cells
+# Switch to ordering by groups of cells
 res_immune$name %<>% factor(levels=immune_order_by_cell)
 
 # FIGURE
@@ -136,14 +136,39 @@ ggsave(filename = here("pics/integrate_brain_ranks_3level.pdf"), width = 5.3, he
 
 ```
 
-SUPPLEMENTARY TABLE
+NEW FOR REVISION - CROSS-DISORDER TILE PLOTS WITH RAW P-VALUES
+Cross-disorder immune tile plot
+```{r}
+# GIVE FIGURES THE SAME P-VAL SCALE
+
+# FIGURE IMMUNE
+ggplot(res_immune, aes(x=condition, y=name, fill=-log10(Coefficient_P_value), size=Significance3)) +  geom_point(shape=22) + scale_fill_viridis(name = "-log10(P-value)", direction = 1, limits=c(0,25)) + scale_size_manual(values=c(1,3,5)) + theme_bw() + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust=0.5), legend.title = element_text(size=10)) + xlab("") + ylab("") + guides(fill=guide_colorbar(reverse=T))
+ggsave(filename = here("pics/integrate_immune_rawpvals_3level.pdf"), width = 6.7, height=5.9)
+
+# FIGURE BRAIN
+ggplot(res_brain, aes(x=condition, y=name, fill=-log10(Coefficient_P_value), size=Significance3)) +  geom_point(shape=22) + scale_fill_viridis(name = "-log10(P-value)", direction = 1, limits=c(0,25)) + scale_size_manual(values=c(1,3,5)) + theme_bw() + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust=0.5), legend.title = element_text(size=10)) + xlab("") + ylab("") + guides(fill=guide_colorbar(reverse=T))
+ggsave(filename = here("pics/integrate_brain_rawpvals_3level.pdf"), width = 5.3, height=3.3)
+
+```
+
+
+SUPPLEMENTARY DATA 1
 Print, for all conditions, condition; tissue type; coefficient; coefficient SD; p-value
 ```{r}
 
+# Add 95% CIs
+# Lower bound is zero
+tmp <- lapply(res_IDEASv1_active, function(y) {
+  y$CI_95_lower <- y$Coefficient - 1.96*y$Coefficient_std_error 
+  y$CI_95_upper <- y$Coefficient + 1.96*y$Coefficient_std_error
+  y$CI_95_lower[y$CI_95_lower<0] <- 0
+  return(y)
+  })
+
 # Write results list to multiple sheets, one per disorder
 library(writexl)
-x <- lapply(res_IDEASv1_active, function(x) {as.data.frame(x %>% arrange(Coefficient_P_value) %>% select(EID, name, Coefficient, Coefficient_std_error, Coefficient_P_value, FDR))})
-write_xlsx(x, format_headers=T, col_names = T, path = here("res/table_S4.xlsx"))
+x <- lapply(tmp, function(x) {as.data.frame(x %>% arrange(Coefficient_P_value) %>% select(EID, name, Coefficient,CI_95_lower,CI_95_upper,Coefficient_std_error, Coefficient_P_value, FDR))})
+write_xlsx(x, format_headers=T, col_names = T, path = here("res/table_supplementary_data_1.xlsx"))
 
 ```
 
